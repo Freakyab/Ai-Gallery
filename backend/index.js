@@ -737,7 +737,6 @@ app.delete("/mark-as-read/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const notification = await Notification.findOneAndDelete({ _id: id });
-    console.log(notification);
     
     if (!notification) {
       return res.status(404).json({
