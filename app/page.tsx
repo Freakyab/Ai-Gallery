@@ -1014,7 +1014,7 @@ export default function Page() {
         setIsLoading(true);
         const response = await fetch(
           // `https://ai-gallery-backend.vercel.app/mark-as-read/${item._id}`,
-          `http://localhost:8000/mark-as-read/${item._id}`,
+          `https://ai-gallery-backend.vercel.app/mark-as-read/${item._id}`,
           {
             method: "DELETE",
           }
