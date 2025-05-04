@@ -424,6 +424,10 @@ export default function Page() {
 
     return (
       <div className="w-full h-screen border-l border-gray-200/20 overflow-auto">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200/20">
+          <h2 className="sm:text-lg text-base font-semibold">Post</h2>
+        </div>
+
         {post && <Posts item={post} refresh={true} />}
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
@@ -1750,6 +1754,9 @@ export default function Page() {
 
     return (
       <div className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200/20">
+          <h2 className="sm:text-lg text-base font-semibold">Saved Posts</h2>
+        </div>
         {isLoading && (
           <div className="flex items-center justify-center h-screen">
             <Loader2 className="text-white animate-spin" size={24} />
