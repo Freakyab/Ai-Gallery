@@ -763,7 +763,7 @@ export default function Page() {
               </div>
             </div>
           ))}
-          {filteredData.length === 0 && (
+          {filteredData.length === 0 && !isLoading && (
             <div className="flex items-center justify-center h-full">
               <p className="text-gray-500">No communities found</p>
             </div>
