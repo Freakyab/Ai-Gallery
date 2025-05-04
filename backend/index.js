@@ -131,11 +131,15 @@ app.post("/upload", async (req, res) => {
   }
 });
 
-app.get("/posts", async (req, res) => {
+app.get("/posts/:userId", async (req, res) => {
   try {
+    const { userId } = req.params;
     const posts = await Post.find().sort({ createdAt: -1 });
+
     //find all docs where postId is in the array of posts
-    const savedPost = await Saved.find({ postId: { $in: posts.map((post) => post._id) } });
+    const savedPost = await Saved.find({
+      postId: { $in: posts.map((post) => post._id) },
+    });
 
     const postsWithUserDetails = await Promise.all(
       posts.map(async (post) => {
@@ -144,6 +148,15 @@ app.get("/posts", async (req, res) => {
           ...post._doc,
           avatar: user.picture,
           username: user.name,
+          isSaved: userId
+            ? savedPost.some(
+                (saved) =>
+                  saved.postId.toString() === post._id.toString() &&
+                  saved.userId.toString() === userId
+              )
+            : false,
+          isLiked: userId && post.liked.includes(userId) ? true : false,
+          isEditable: userId && post.userId.toString() === userId,
         };
       })
     );
@@ -152,7 +165,7 @@ app.get("/posts", async (req, res) => {
       message: "Posts fetched successfully",
       status: true,
       posts: postsWithUserDetails,
-      savedPost: savedPost
+      savedPost: savedPost,
     });
   } catch (err) {
     console.error(err.message);
@@ -163,11 +176,20 @@ app.get("/posts", async (req, res) => {
   }
 });
 
+//id is a postId
 app.get("/comments/:id/:userId", async (req, res) => {
   try {
     const { id, userId } = req.params;
     const post = await Post.findById(id);
-    const savedPost = await Saved.findOne({ postId: id, userId });
+    let savedPost = null;
+
+    if (userId !== "undefined") {
+      console.log("userId", userId);
+      savedPost = await Saved.findOne({
+        postId: id,
+        userId,
+      });
+    }
 
     if (!post) {
       return res.status(404).json({
@@ -247,6 +269,8 @@ app.get("/comments/:id/:userId", async (req, res) => {
         avatar: user.picture,
         username: user.name,
         isSaved: savedPost ? true : false,
+        isLiked: userId && post.liked.includes(userId) ? true : false,
+        isEditable: userId && post.userId.toString() === userId,
       },
     ]);
 
@@ -259,7 +283,6 @@ app.get("/comments/:id/:userId", async (req, res) => {
       username: userMap.get(comment.userId.toString()).name,
       isLiked: comment.liked.includes(userId),
       isEditable: comment.userId.toString() === userId,
-
     }));
 
     return res.status(200).json({
@@ -290,7 +313,7 @@ app.post("/comment/:id", async (req, res) => {
 
     const user = await Account.findById(userId);
     const post = await Post.findById(id);
-    
+
     const newComment = new Comments({
       userId,
       comment,
@@ -298,7 +321,7 @@ app.post("/comment/:id", async (req, res) => {
     });
 
     await newComment.save();
-    
+
     if (userId !== post.userId.toString()) {
       const notification = new Notification({
         desc: `New comments on your post by ${user.name}`,
@@ -349,16 +372,27 @@ app.get("/community/:id/:userId", async (req, res) => {
   try {
     const { id, userId } = req.params;
     const community = await Community.findById(id);
-    const user = await Account.findById(userId);
-    
-    const isMember = user.communityId.includes(id);
+    let isMember = false;
+
+    if (userId !== "undefined") {
+      const viewingUser = await Account.findById(userId);
+      isMember = viewingUser?.communityId.includes(id) || false;
+    }
+
     const updatedCommunity = {
       ...community._doc,
       isMember: isMember,
     };
-    
+
     const posts = await Post.find({ communityId: id }).sort({ createdAt: -1 });
-    const savedPost = await Saved.find({ postId: { $in: posts.map((post) => post._id) } , userId });
+
+    let savedPost = [];
+    if (userId !== "undefined") {
+      savedPost = await Saved.find({
+        postId: { $in: posts.map((post) => post._id) },
+        userId,
+      });
+    }
 
     const postsWithUserDetails = await Promise.all(
       posts.map(async (post) => {
@@ -367,9 +401,17 @@ app.get("/community/:id/:userId", async (req, res) => {
           ...post._doc,
           avatar: user.picture,
           username: user.name,
+          isLiked: userId !== "undefined" ? post.liked.includes(userId) : false,
+          isSaved: userId !== "undefined" ? savedPost.some(
+            (saved) =>
+              saved.postId.toString() === post._id.toString() &&
+              saved.userId.toString() === userId
+          ) : false,
+          isEditable: userId !== "undefined" ? post.userId.toString() === userId : false,
         };
       })
     );
+
     if (!community) {
       return res.status(404).json({
         message: "Community not found",
@@ -382,7 +424,7 @@ app.get("/community/:id/:userId", async (req, res) => {
       status: true,
       community: updatedCommunity,
       posts: postsWithUserDetails,
-      savedPost: savedPost
+      savedPost: savedPost,
     });
   } catch (err) {
     console.error(err.message);
@@ -506,20 +548,28 @@ app.post("/leave-community/:id/:userId", async (req, res) => {
   }
 });
 
-app.get("/user/:id", async (req, res) => {
+app.get("/user-profile/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const user = await Account.findById(id);
     const posts = await Post.find({ userId: id }).sort({ createdAt: -1 });
-    const savedPost = await Saved.find({ postId: { $in: posts.map((post) => post._id) } , userId : id });
+    const savedPost = await Saved.find({
+      postId: { $in: posts.map((post) => post._id) },
+      userId: id,
+    });
     const postsWithUserDetails = await Promise.all(
       posts.map(async (post) => {
-        const user = await Account.findById(post.userId);
-
         return {
           ...post._doc,
           avatar: user.picture,
           username: user.name,
+          isLiked: post.liked.includes(id) ? true : false,
+          isSaved: savedPost.some(
+            (saved) => saved.postId.toString() === post._id.toString()
+          )
+            ? true
+            : false,
+          isEditable: post.userId.toString() === id ? true : false,
         };
       })
     );
@@ -535,7 +585,7 @@ app.get("/user/:id", async (req, res) => {
       status: true,
       user: user,
       posts: postsWithUserDetails,
-      savedPost: savedPost
+      savedPost: savedPost,
     });
   } catch (err) {
     console.error(err.message);
@@ -545,8 +595,6 @@ app.get("/user/:id", async (req, res) => {
     });
   }
 });
-
-
 
 app.delete("/delete-post/:id", async (req, res) => {
   try {
@@ -872,8 +920,7 @@ app.post("/save/:id/:userId", async (req, res) => {
       status: false,
     });
   }
-}
-);
+});
 
 app.get("/saved/:userId", async (req, res) => {
   try {
@@ -892,6 +939,13 @@ app.get("/saved/:userId", async (req, res) => {
           avatar: user.picture,
           username: user.name,
           isSaved: true,
+          isLiked: post.liked.includes(userId) ? true : false,
+          isEditable: post.userId.toString() === userId,
+          isSaved: savedPosts.some(
+            (saved) => saved.postId.toString() === post._id.toString()
+          )
+            ? true
+            : false,
         };
       })
     );
@@ -908,8 +962,7 @@ app.get("/saved/:userId", async (req, res) => {
       status: false,
     });
   }
-}
-);
+});
 
 app.listen(PORT, () => {
   console.log(`Server is listening on port ${PORT}`);

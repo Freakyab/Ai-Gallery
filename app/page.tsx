@@ -7,7 +7,6 @@ import {
   FileImage,
   Heart,
   Home,
-  HomeIcon,
   Loader2,
   LogIn,
   LogOut,
@@ -19,13 +18,10 @@ import {
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   GoogleOAuthProvider,
-  GoogleLogin,
   googleLogout,
   useGoogleLogin,
 } from "@react-oauth/google";
 import React from "react";
-import { jwtDecode } from "jwt-decode";
-import { set } from "@cloudinary/url-gen/actions/variable";
 
 type User = {
   email: string;
@@ -46,8 +42,6 @@ type Post = {
   share: number;
   isEditable: boolean;
   isLiked: boolean;
-  userId: string;
-  liked: [string];
   isSaved: boolean;
 };
 
@@ -106,8 +100,6 @@ const formattedTime = (time: string) => {
 
 export default function Layout() {
   const [user, setUser] = React.useState<User | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [refresh, setRefresh] = React.useState(false);
   const [isActiveTab, setIsActiveTab] = React.useState("feed");
   const searchParams = useSearchParams();
   const community = searchParams.get("community");
@@ -281,39 +273,30 @@ export default function Layout() {
 
   const Feed = () => {
     const [posts, setPosts] = React.useState<Post[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+
     React.useEffect(() => {
       const fetchPosts = async () => {
         try {
-          const response = await fetch(`http://localhost:8000/posts`);
+          setIsLoading(true);
+          const response = await fetch(
+            `http://localhost:8000/posts/${user?._id}`
+          );
           const data = await response.json();
           if (!data.status) {
             alert("Failed to fetch posts");
             return;
           }
-          const posts = data.posts;
-          const savedPost = data.savedPost;
-          if (posts.length > 0) {
-            const editablePosts = posts.map((post: Post) => {
-              const isEditable =
-                post.userId?.toString() === user?._id?.toString();
-              const isLiked = user && post.liked.includes(user._id);
-              const isSaved = user
-                ? savedPost.some(
-                    (_post: any) =>
-                      _post.postId === post._id && _post.userId === user._id
-                  )
-                : false;
-              return { ...post, isEditable, isLiked, isSaved };
-            });
-            setPosts(editablePosts);
-          }
+          setPosts(data.posts);
         } catch (error) {
           console.error("Error fetching posts:", error);
+        } finally {
+          setIsLoading(false);
         }
       };
 
       fetchPosts();
-    }, [refresh, user]);
+    }, [user]);
 
     return (
       <div
@@ -336,7 +319,17 @@ export default function Layout() {
             Notifications
           </p>
         </div>
+        {isLoading && (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        )}
 
+        {!isLoading && posts.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500">No posts available</p>
+          </div>
+        )}
         <div
           className="overflow-auto h-[calc(100vh-80px)]"
           style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
@@ -345,7 +338,7 @@ export default function Layout() {
               <UploadPost />
               {posts.map((item, index) => (
                 <div key={index} className="border-b border-gray-200/20">
-                  <Posts item={item} />
+                  <Posts item={item} setPosts={setPosts} />
                 </div>
               ))}
             </React.Fragment>
@@ -375,15 +368,8 @@ export default function Layout() {
             alert("Failed to fetch post");
             return;
           }
-          const post = data.post;
-          const isEditable = post.userId === user?._id;
-          const isLiked = user?._id ? post.liked.includes(user._id) : false;
-          const editablePosts = {
-            ...post,
-            isEditable,
-            isLiked,
-          };
-          setPost(editablePosts);
+
+          setPost(data.post);
           setComments(data.comments);
         } catch (error) {
           console.error("Error fetching post:", error);
@@ -393,13 +379,12 @@ export default function Layout() {
       };
 
       fetchPost();
-    }, [postId, refresh]);
+    }, [postId]);
 
     const handleCommentSubmit = async () => {
       if (!user) return alert("Please login to comment");
 
       try {
-        setRefresh(true);
         const response = await fetch(
           `http://localhost:8000/comment/${postId}`,
           {
@@ -423,14 +408,12 @@ export default function Layout() {
         }
       } catch (error) {
         console.error("Error adding comment:", error);
-      } finally {
-        setRefresh(false);
       }
     };
 
     return (
       <div className="w-full h-screen border-l border-gray-200/20 overflow-auto">
-        {post && <Posts item={post} />}
+        {post && <Posts item={post} refresh={true} />}
         <div className="flex p-4 border-b gap-4 border-gray-200/20">
           <input
             type="text"
@@ -449,7 +432,11 @@ export default function Layout() {
           <div
             key={index}
             className="flex flex-col border-b border-gray-200/20">
-            <Comments item={item} />
+            <Comments
+              item={item}
+              setComments={setComments}
+              comments={comments}
+            />
           </div>
         ))}
 
@@ -465,6 +452,7 @@ export default function Layout() {
   const UploadPost = ({}) => {
     const [file, setFile] = React.useState<File | null>(null);
     const [preview, setPreview] = React.useState<string | null>(null);
+    const [isLoading, setIsLoading] = React.useState(false);
     const [text, setText] = React.useState("");
     const [communitiesJoined, setCommunitiesJoined] = React.useState<
       {
@@ -479,6 +467,7 @@ export default function Layout() {
       const fetchCommunities = async () => {
         if (!user) return;
         try {
+          setIsLoading(true);
           const response = await fetch(
             `http://localhost:8000/my-communities/${user._id}`
           );
@@ -490,6 +479,8 @@ export default function Layout() {
           setCommunitiesJoined(data.communities);
         } catch (error) {
           console.error("Error fetching communities:", error);
+        }finally {
+          setIsLoading(false);
         }
       };
 
@@ -521,7 +512,6 @@ export default function Layout() {
 
       try {
         setIsLoading(true);
-        setRefresh(true);
         // Upload to Cloudinary
         let imageUrl = "";
 
@@ -563,6 +553,7 @@ export default function Layout() {
           setText("");
           setFile(null);
           setPreview(null);
+          router.refresh();
         } else {
           alert("Failed to upload post");
         }
@@ -570,7 +561,6 @@ export default function Layout() {
         console.error("Error uploading image:", error);
       } finally {
         setIsLoading(false);
-        setRefresh(false);
       }
     };
 
@@ -656,21 +646,14 @@ export default function Layout() {
 
           <button
             className="w-full sm:w-auto bg-white text-black px-6 py-2 rounded-full transition duration-200 hover:bg-gray-200"
-            onClick={handleSubmit}>
-            Share
+            onClick={handleSubmit}
+            disabled={isLoading || !text.trim()}>
+            {isLoading && (
+              <Loader2 className="text-white animate-spin" size={24} />
+            )}
+            {!isLoading && "Share"}
           </button>
         </div>
-      </div>
-    );
-  };
-
-  const Loading = () => {
-    return (
-      <div
-        className={`flex items-center justify-center h-full ${
-          isLoading ? "" : "hidden"
-        }`}>
-        <Loader2 className="text-white animate-spin" size={24} />
       </div>
     );
   };
@@ -717,7 +700,7 @@ export default function Layout() {
       <div
         className={`${
           isActiveTab !== "community" && "hidden"
-        } sm:block w-full sm:w-1/2 border-l border-gray-200/20`}
+        } sm:block absolute sm:relative z-1 bg-black w-full sm:w-1/2 border-l border-gray-200/20`}
         style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
         <div className="p-4">
           <input
@@ -766,9 +749,20 @@ export default function Layout() {
     );
   };
 
-  const Posts = ({ item }: { item: Post }) => {
+  const Posts = ({
+    item,
+    refresh,
+    setPosts,
+  }: {
+    item: Post;
+    refresh?: boolean;
+    setPosts?: React.Dispatch<React.SetStateAction<Post[]>>;
+  }) => {
+    const [isLoading, setIsLoading] = React.useState(false);
+
     const handleDeletePost = async () => {
       try {
+        setIsLoading(true);
         const response = await fetch(
           `http://localhost:8000/delete-post/${item._id}`,
           {
@@ -784,6 +778,8 @@ export default function Layout() {
         }
       } catch (error) {
         console.error("Error deleting post:", error);
+      }finally {
+        setIsLoading(false);
       }
     };
 
@@ -804,6 +800,20 @@ export default function Layout() {
         if (!data.status) {
           alert("Failed to like post");
         }
+        if (refresh) return router.refresh();
+
+        setPosts &&
+          setPosts((prevPosts) =>
+            prevPosts.map((post) =>
+              post._id === item._id
+                ? {
+                    ...post,
+                    isLiked: !post.isLiked,
+                    like: post.isLiked ? post.like - 1 : post.like + 1,
+                  }
+                : post
+            )
+          );
       } catch (error) {
         console.error("Error liking post:", error);
       } finally {
@@ -828,6 +838,18 @@ export default function Layout() {
         if (!data.status) {
           alert("Failed to save post");
         }
+        if (refresh) return router.refresh();
+        setPosts &&
+          setPosts((prevPosts) =>
+            prevPosts.map((post) =>
+              post._id === item._id
+                ? {
+                    ...post,
+                    isSaved: !post.isSaved,
+                  }
+                : post
+            )
+          );
       } catch (error) {
         console.error("Error saving post:", error);
       } finally {
@@ -838,6 +860,12 @@ export default function Layout() {
     return (
       <React.Fragment>
         <div className="border-b border-gray-200/20 p-4 flex gap-2">
+          {isLoading && (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="text-white animate-spin" size={24} />
+            </div>
+          )}
+
           <img
             src={item.avatar}
             alt="Avatar"
@@ -944,7 +972,6 @@ export default function Layout() {
 
     const handleMarkAsRead = async (item: Notification) => {
       try {
-        setRefresh(true);
         const response = await fetch(
           `http://localhost:8000/mark-as-read/${item._id}`,
           {
@@ -966,8 +993,6 @@ export default function Layout() {
         }
       } catch (error) {
         console.error("Error marking as read:", error);
-      } finally {
-        setRefresh(false);
       }
     };
 
@@ -1051,12 +1076,15 @@ export default function Layout() {
     const [communityDetails, setCommunityDetails] =
       React.useState<Community | null>(null);
     const [posts, setPosts] = React.useState<Post[]>([]);
-
+    const [isLoading, setIsLoading] = React.useState(false);
     const [selectedFilter, setSelectedFilter] = React.useState("");
+
     setIsActiveTab("communityDetails");
+
     React.useEffect(() => {
       const fetchCommunityDetails = async () => {
         try {
+          setIsLoading(true);
           const response = await fetch(
             `http://localhost:8000/community/${community}/${user?._id}`
           );
@@ -1067,24 +1095,12 @@ export default function Layout() {
             return;
           }
           setCommunityDetails(data.community);
-          const posts = data.posts;
-          const savedPost = data.savedPost;
-          if (posts.length > 0) {
-            const editablePosts = posts.map((post: Post) => {
-              const isEditable = post.userId === user?._id;
-              const isLiked = user?._id ? post.liked.includes(user._id) : false;
-              const isSaved = user
-                ? savedPost.some(
-                    (_post: any) =>
-                      _post.postId === post._id && _post.userId === user._id
-                  )
-                : false;
-              return { ...post, isEditable, isLiked, isSaved };
-            });
-            setPosts(editablePosts);
-          }
+
+          setPosts(data.posts);
         } catch (error) {
           console.error("Error fetching community details:", error);
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -1158,26 +1174,11 @@ export default function Layout() {
         case "most-commented":
           sortedPosts.sort((a, b) => b.comment - a.comment);
           break;
-        case "most-shared":
-          sortedPosts.sort((a, b) => b.share - a.share);
-          break;
         default:
           break;
       }
       setPosts(sortedPosts);
     };
-
-    if (!communityDetails)
-      return (
-        <div className="flex items-center justify-center h-full">Not found</div>
-      );
-
-    if (!community || community === "undefined")
-      return (
-        <div className="flex items-center justify-center h-full">
-          No community selected
-        </div>
-      );
 
     const filterButtons = (title: string, filter: string) => {
       return (
@@ -1194,6 +1195,23 @@ export default function Layout() {
       <div
         className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4"
         style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
+        {isLoading && (
+          <div className="flex items-center justify-center h-screen">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        )}
+
+        {!community ||
+          (community === "undefined" && (
+            <div className="flex items-center justify-center h-full">
+              No community selected
+            </div>
+          ))}
+        {!communityDetails && (
+          <div className="flex items-center justify-center h-full">
+            No community found
+          </div>
+        )}
         <div className="relative">
           <div className="sm:h-32 h-24 w-full bg-gray-200/20 sm:rounded-xl"></div>
           <div className="flex flex-col items-start my-8 ml-32">
@@ -1210,7 +1228,7 @@ export default function Layout() {
               <span className="text-gray-500 text-sm">
                 {"  ("}
                 {communityDetails?.members}
-                {communityDetails?.members > 1 ? " Members" : " Member"}
+                {(communityDetails?.members ?? 0) > 1 ? " Members" : " Member"}
                 {")"}
               </span>
             </h2>
@@ -1222,7 +1240,6 @@ export default function Layout() {
             {filterButtons("Latest", "latest")}
             {filterButtons("Most Liked", "most-liked")}
             {filterButtons("Most Commented", "most-commented")}
-            {filterButtons("Most Shared", "most-shared")}
           </div>
           <div className="border border-gray-200/20 rounded-lg mt-4 mb-6" />
           {!communityDetails?.isMember ? (
@@ -1250,14 +1267,24 @@ export default function Layout() {
             <p className="text-gray-500">No posts available</p>
           </div>
         )}
-        {posts.map((item, index) => (
-          <Posts key={item._id} item={item} />
+        {posts.map((item) => (
+          <Posts setPosts={setPosts} key={item._id} item={item} />
         ))}
       </div>
     );
   };
 
-  const Comments = ({ item }: { item: Comment }) => {
+  const Comments = ({
+    item,
+    setComments,
+    comments,
+  }: {
+    item: Comment;
+    setComments: React.Dispatch<React.SetStateAction<Comment[]>>;
+    comments: Comment[];
+  }) => {
+    const [isLoading, setIsLoading] = React.useState(false);
+
     const handleLike = async () => {
       try {
         setIsLoading(true);
@@ -1273,6 +1300,19 @@ export default function Layout() {
         if (!data.status) {
           alert("Failed to like comment");
         }
+        setComments((prevComments) =>
+          prevComments.map((comment) =>
+            comment._id === item._id
+              ? {
+                  ...comment,
+                  isLiked: !comment.isLiked,
+                  likes: comment.isLiked
+                    ? comment.likes - 1
+                    : comment.likes + 1,
+                }
+              : comment
+          )
+        );
       } catch (error) {
         console.error("Error liking comment:", error);
       } finally {
@@ -1302,6 +1342,12 @@ export default function Layout() {
 
     return (
       <div className="border-b border-gray-200/20 p-4 flex gap-2">
+        {isLoading && (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        )}
+
         <img
           src={item.avatar}
           alt="Avatar"
@@ -1367,7 +1413,7 @@ export default function Layout() {
           if (!user) return;
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/user/${user?._id}`
+            `http://localhost:8000/user-profile/${user?._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -1375,22 +1421,7 @@ export default function Layout() {
             return;
           }
           setUserDetails(data.user);
-          const posts = data.posts;
-          const savedPost = data.savedPost;
-          if (posts.length > 0) {
-            const editablePosts = posts.map((post: Post) => {
-              const isEditable = post.userId === user?._id;
-              const isLiked = post.liked.includes(user._id);
-              const isSaved = user
-                ? savedPost.some(
-                    (_post: any) =>
-                      _post.postId === post._id && _post.userId === user._id
-                  )
-                : false;
-              return { ...post, isEditable, isLiked , isSaved };
-            });
-            setPosts(editablePosts);
-          }
+          setPosts(data.posts);
         } catch (error) {
           console.error("Error fetching user details:", error);
         } finally {
@@ -1401,16 +1432,22 @@ export default function Layout() {
       fetchUserDetails();
     }, [user]);
 
-    if (!UserDetails)
-      return (
-        <div className="flex items-center justify-center h-full">Not found</div>
-      );
-
     return (
       <div
         className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4"
         style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
-        {isLoading && <Loading />}
+        {isLoading && (
+          <div className="flex items-center justify-center h-screen">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        )}
+
+        {!UserDetails && (
+          <div className="flex items-center justify-center h-full">
+            No user found
+          </div>
+        )}
+
         <div className="relative">
           <div className="sm:h-32 h-24 w-full bg-gray-200/20 sm:rounded-xl"></div>
           <div className="flex flex-col items-start my-8 ml-32">
@@ -1434,13 +1471,14 @@ export default function Layout() {
           </div>
         )}
         {posts.map((item, index) => (
-          <Posts key={item._id} item={item} />
+          <Posts setPosts={setPosts} key={item._id} item={item} />
         ))}
       </div>
     );
   };
 
   const MobileSideBar = () => {
+    const [isLoading, setIsLoading] = React.useState(false);
     const login = useGoogleLogin({
       onSuccess: async (tokenResponse) => {
         try {
@@ -1486,7 +1524,7 @@ export default function Layout() {
     });
 
     return (
-      <div className="sm:hidden absolute bottom-2 w-[90%] left-[5%]  bg-gray-500/20 backdrop-blur-md rounded-2xl p-4">
+      <div className="sm:hidden z-10 absolute bottom-2 w-[90%] left-[5%]  bg-gray-500/20 backdrop-blur-md rounded-2xl p-4">
         <div className="flex items-center justify-between">
           <Home
             size={24}
@@ -1496,11 +1534,11 @@ export default function Layout() {
               setIsActiveTab("feed");
             }}
           />
-          <BellDot
+          {/* <BellDot
             size={24}
             className="text-white"
             onClick={() => setIsActiveTab("notification")}
-          />
+          /> */}
 
           <Users
             onClick={() => setIsActiveTab("community")}
@@ -1511,9 +1549,19 @@ export default function Layout() {
             size={24}
             className="text-white"
             onClick={() => {
-              if (!user) alert("Please login to view profile");
+              if (!user) return alert("Please login to view profile");
               setIsActiveTab("profile");
               router.push("/?profile=true");
+            }}
+          />
+
+          <Bookmark
+            size={24}
+            className="text-white"
+            onClick={() => {
+              if (!user) return alert("Please login to view saved posts");
+              setIsActiveTab("saved");
+              router.push("/?saved=true");
             }}
           />
 
@@ -1618,15 +1666,7 @@ export default function Layout() {
             alert("Failed to fetch user details");
             return;
           }
-          const posts = data.posts;
-          if (posts.length > 0) {
-            const editablePosts = posts.map((post: Post) => {
-              const isEditable = post.userId === user?._id;
-              const isLiked = post.liked.includes(user._id);
-              return { ...post, isEditable, isLiked };
-            });
-            setPosts(editablePosts);
-          }
+          setPosts(data.posts);
         } catch (error) {
           console.error("Error fetching user details:", error);
         } finally {
@@ -1639,8 +1679,25 @@ export default function Layout() {
 
     return (
       <div className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4">
+        {isLoading && (
+          <div className="flex items-center justify-center h-screen">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        )}
+
+        {!user && (
+          <div className="flex items-center justify-center h-full">
+            Please login to view saved posts
+          </div>
+        )}
+
+        {posts.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500">No saved posts available</p>
+          </div>
+        )}
         {posts.map((item, index) => (
-          <Posts key={item._id} item={item} />
+          <Posts setPosts={setPosts}  key={item._id} item={item} />
         ))}
       </div>
     );
@@ -1660,11 +1717,9 @@ export default function Layout() {
           <PostWithComments />
         ) : profile && user !== null ? (
           <Profile />
-        ) : 
-          saved && user !== null ? (
+        ) : saved && user !== null ? (
           <SavedPost />
-          ) :
-        (
+        ) : (
           <Feed />
         )}
         <Community />
