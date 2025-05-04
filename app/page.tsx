@@ -1,113 +1,1674 @@
-import Image from "next/image";
+"use client";
+import {
+  BellDot,
+  Bookmark,
+  ChevronDownSquareIcon,
+  CircleUser,
+  FileImage,
+  Heart,
+  Home,
+  HomeIcon,
+  Loader2,
+  LogIn,
+  LogOut,
+  MessageCircle,
+  Trash,
+  Users,
+  X,
+} from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  GoogleOAuthProvider,
+  GoogleLogin,
+  googleLogout,
+  useGoogleLogin,
+} from "@react-oauth/google";
+import React from "react";
+import { jwtDecode } from "jwt-decode";
+import { set } from "@cloudinary/url-gen/actions/variable";
 
-export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+type User = {
+  email: string;
+  name: string;
+  picture: string;
+  _id: string;
+};
+
+type Post = {
+  _id: string;
+  username: string;
+  avatar: string;
+  post: string;
+  createdAt: string;
+  image?: string;
+  like: number;
+  comment: number;
+  share: number;
+  isEditable: boolean;
+  isLiked: boolean;
+  userId: string;
+  liked: [string];
+  isSaved: boolean;
+};
+
+type Community = {
+  _id: string;
+  title: string;
+  description: string;
+  members: number;
+  image: string;
+  isMember: boolean;
+};
+
+type Notification = {
+  commentId?: string;
+  community?: string;
+  postId?: string;
+  isCommunity: Boolean;
+  _id: string;
+  avatar: string;
+  createdAt: string;
+  desc: string;
+  isRead: boolean;
+  name: string;
+};
+
+type Comment = {
+  liked: string[];
+  _id: string;
+  postId: string;
+  userId: string;
+  likes: number;
+  avatar: string;
+  username: string;
+  image: string;
+  isLiked: boolean;
+  comment: string;
+  createdAt: string;
+  isEditable: boolean;
+};
+
+const formattedTime = (time: string) => {
+  const date = new Date(time);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) {
+    return `${diffInSeconds} seconds ago`;
+  } else if (diffInSeconds < 3600) {
+    return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+  } else if (diffInSeconds < 86400) {
+    return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+  } else {
+    return `${Math.floor(diffInSeconds / 86400)} days ago`;
+  }
+};
+
+export default function Layout() {
+  const [user, setUser] = React.useState<User | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [refresh, setRefresh] = React.useState(false);
+  const [isActiveTab, setIsActiveTab] = React.useState("feed");
+  const searchParams = useSearchParams();
+  const community = searchParams.get("community");
+  const postId = searchParams.get("post");
+  const commentOpen = searchParams.get("comments");
+  const profile = searchParams.get("profile");
+  const saved = searchParams.get("saved");
+  const router = useRouter();
+
+  const Sidebar = () => {
+    const [isLoading, setIsLoading] = React.useState(false);
+
+    const login = useGoogleLogin({
+      onSuccess: async (tokenResponse) => {
+        try {
+          setIsLoading(true);
+          // Get user info from Google
+          const userInfoResponse = await fetch(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            {
+              headers: {
+                Authorization: `Bearer ${tokenResponse.access_token}`,
+              },
+            }
+          );
+          const userInfo = await userInfoResponse.json();
+
+          // Login to your backend
+          const response = await fetch("http://localhost:8000/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: userInfo.email,
+              password: userInfo.sub + userInfo.email,
+              name: userInfo.name,
+              picture: userInfo.picture,
+            }),
+          });
+          const data = await response.json();
+          if (data.status) {
+            setUser(data.user);
+          }
+        } catch (error) {
+          console.error("Error during login:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      onError: () => {
+        console.error("Login Failed");
+        setUser(null);
+      },
+    });
+
+    const IconWithName = ({
+      onClick,
+      title,
+      icon,
+    }: {
+      onClick: () => void;
+      title: string;
+      icon: React.ReactNode;
+    }) => {
+      return (
+        <button
+          onClick={onClick}
+          className="flex items-center gap-4 p-3 hover:bg-gray-900 rounded-full transition-colors">
+          {icon}
+          <span className="text-xl sm:hidden lg:block">{title}</span>
+        </button>
+      );
+    };
+    return (
+      <div className="hidden sm:w-[10%] lg:w-[35%] h-screen sm:flex flex-col gap-4 p-4">
+        <div className="flex justify-center p-4">
+          {/* X/Twitter Logo placeholder */}
+          <svg
+            viewBox="0 0 24 24"
+            className="h-8 w-8 text-white"
+            fill="currentColor">
+            <g>
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+            </g>
+          </svg>
+        </div>
+
+        <nav className="flex flex-col h-full justify-between mb-6 gap-2">
+          <div>
+            <IconWithName
+              title="Home"
+              icon={<Home size={24} />}
+              onClick={() => {
+                setIsActiveTab("feed");
+                router.push("/");
+              }}
             />
-          </a>
+
+            <IconWithName
+              title="Notifications"
+              icon={<BellDot size={24} />}
+              onClick={() => {
+                setIsActiveTab("notifications");
+                router.push("/");
+              }}
+            />
+
+            <IconWithName
+              title="Profile"
+              icon={<CircleUser size={24} />}
+              onClick={() => {
+                if (!user) alert("Please login to view profile");
+                router.push("/?profile=true");
+              }}
+            />
+            <IconWithName
+              title="Saved"
+              icon={<Bookmark size={24} />}
+              onClick={() => {
+                if (!user) alert("Please login to view profile");
+                router.push("/?saved=true");
+              }}
+            />
+          </div>
+
+          {!user ? (
+            <button
+              onClick={() => {
+                login();
+              }}
+              className="w-full">
+              {isLoading && (
+                <Loader2 className="text-white animate-spin" size={24} />
+              )}
+              <div className="w-full flex items-center md:gap-4 p-2 hover:bg-gray-900 rounded-full transition-colors ">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-10 h-10 lg:w-8 lg:h-8"
+                  viewBox="0 0 48 48">
+                  <path
+                    fill="#FFC107"
+                    d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
+                  <path
+                    fill="#FF3D00"
+                    d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path>
+                  <path
+                    fill="#4CAF50"
+                    d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path>
+                  <path
+                    fill="#1976D2"
+                    d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path>
+                </svg>
+                <span className="text-xl sm:hidden lg:block">Sign in</span>
+              </div>
+            </button>
+          ) : (
+            <IconWithName
+              title="Logout"
+              icon={<LogOut size={24} />}
+              onClick={async () => {
+                googleLogout();
+                setUser(null);
+              }}
+            />
+          )}
+        </nav>
+      </div>
+    );
+  };
+
+  const Feed = () => {
+    const [posts, setPosts] = React.useState<Post[]>([]);
+    React.useEffect(() => {
+      const fetchPosts = async () => {
+        try {
+          const response = await fetch(`http://localhost:8000/posts`);
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch posts");
+            return;
+          }
+          const posts = data.posts;
+          const savedPost = data.savedPost;
+          if (posts.length > 0) {
+            const editablePosts = posts.map((post: Post) => {
+              const isEditable =
+                post.userId?.toString() === user?._id?.toString();
+              const isLiked = user && post.liked.includes(user._id);
+              const isSaved = user
+                ? savedPost.some(
+                    (_post: any) =>
+                      _post.postId === post._id && _post.userId === user._id
+                  )
+                : false;
+              return { ...post, isEditable, isLiked, isSaved };
+            });
+            setPosts(editablePosts);
+          }
+        } catch (error) {
+          console.error("Error fetching posts:", error);
+        }
+      };
+
+      fetchPosts();
+    }, [refresh, user]);
+
+    return (
+      <div
+        className={`${
+          isActiveTab === "community" && "hidden"
+        } w-full h-screen border-l border-gray-200/20 overflow-hidden`}>
+        <div className="flex items-center justify-evenly border-b backdrop-blur-sm bg-gray-100/10 shadow-lg">
+          <p
+            onClick={() => setIsActiveTab("feed")}
+            className={`p-4 cursor-pointer ${
+              isActiveTab === "feed" && "border-blue-400 border-b-2"
+            }`}>
+            Feed
+          </p>
+          <p
+            onClick={() => setIsActiveTab("notifications")}
+            className={`p-4 cursor-pointer ${
+              isActiveTab === "notifications" && "border-blue-400 border-b-2"
+            }`}>
+            Notifications
+          </p>
+        </div>
+
+        <div
+          className="overflow-auto h-[calc(100vh-80px)]"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
+          {isActiveTab === "feed" ? (
+            <React.Fragment>
+              <UploadPost />
+              {posts.map((item, index) => (
+                <div key={index} className="border-b border-gray-200/20">
+                  <Posts item={item} />
+                </div>
+              ))}
+            </React.Fragment>
+          ) : (
+            <Notification />
+          )}
         </div>
       </div>
+    );
+  };
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+  const PostWithComments = () => {
+    const [post, setPost] = React.useState<Post | null>(null);
+    const [comments, setComments] = React.useState<Comment[]>([]);
+    const [comment, setComment] = React.useState("");
+    const [isLoading, setIsLoading] = React.useState(false);
+
+    React.useEffect(() => {
+      const fetchPost = async () => {
+        try {
+          setIsLoading(true);
+          const response = await fetch(
+            `http://localhost:8000/comments/${postId}/${user?._id}`
+          );
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch post");
+            return;
+          }
+          const post = data.post;
+          const isEditable = post.userId === user?._id;
+          const isLiked = user?._id ? post.liked.includes(user._id) : false;
+          const editablePosts = {
+            ...post,
+            isEditable,
+            isLiked,
+          };
+          setPost(editablePosts);
+          setComments(data.comments);
+        } catch (error) {
+          console.error("Error fetching post:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchPost();
+    }, [postId, refresh]);
+
+    const handleCommentSubmit = async () => {
+      if (!user) return alert("Please login to comment");
+
+      try {
+        setRefresh(true);
+        const response = await fetch(
+          `http://localhost:8000/comment/${postId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              comment,
+              userId: user._id,
+            }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (data.status) {
+          alert("Comment added successfully");
+          setComments((prev) => [...prev, data.comment]);
+          setComment("");
+        } else {
+          alert("Failed to add comment");
+        }
+      } catch (error) {
+        console.error("Error adding comment:", error);
+      } finally {
+        setRefresh(false);
+      }
+    };
+
+    return (
+      <div className="w-full h-screen border-l border-gray-200/20 overflow-auto">
+        {post && <Posts item={post} />}
+        <div className="flex p-4 border-b gap-4 border-gray-200/20">
+          <input
+            type="text"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add a comment..."
+            className="w-full p-4 border-b border-gray-200/20 focus:outline-none bg-black/10"
+          />
+          <button
+            onClick={() => handleCommentSubmit()}
+            className="bg-blue-500 text-white px-4 py-2 rounded-full mt-2">
+            Submit
+          </button>
+        </div>
+        {comments.map((item, index) => (
+          <div
+            key={index}
+            className="flex flex-col border-b border-gray-200/20">
+            <Comments item={item} />
+          </div>
+        ))}
+
+        {isLoading && (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const UploadPost = ({}) => {
+    const [file, setFile] = React.useState<File | null>(null);
+    const [preview, setPreview] = React.useState<string | null>(null);
+    const [text, setText] = React.useState("");
+    const [communitiesJoined, setCommunitiesJoined] = React.useState<
+      {
+        _id: string;
+        title: string;
+      }[]
+    >([]);
+    const [selectedCommunity, setSelectedCommunity] = React.useState("");
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+      const fetchCommunities = async () => {
+        if (!user) return;
+        try {
+          const response = await fetch(
+            `http://localhost:8000/my-communities/${user._id}`
+          );
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch communities");
+            return;
+          }
+          setCommunitiesJoined(data.communities);
+        } catch (error) {
+          console.error("Error fetching communities:", error);
+        }
+      };
+
+      fetchCommunities();
+    }, [user]);
+
+    const handleImageUpload = async (
+      e: React.ChangeEvent<HTMLInputElement>
+    ) => {
+      const files = e.target.files;
+      if (!files || !files[0]) return;
+
+      const selectedFile = files[0];
+      setFile(selectedFile);
+
+      // Show preview as base64
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreview(reader.result as string);
+          resolve(true);
+        };
+        reader.readAsDataURL(selectedFile);
+      });
+    };
+
+    const handleSubmit = async () => {
+      if (!user) return alert("Please login to upload a post");
+
+      try {
+        setIsLoading(true);
+        setRefresh(true);
+        // Upload to Cloudinary
+        let imageUrl = "";
+
+        if (file) {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("upload_preset", "default-preset"); // make sure this preset is unsigned
+
+          const uploadResponse = await fetch(
+            "https://api.cloudinary.com/v1_1/dz2vnojqy/image/upload",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+          const uploadData = await uploadResponse.json();
+          imageUrl = uploadData.secure_url;
+        }
+
+        const response = await fetch("http://localhost:8000/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: user.name,
+            avatar: user.picture,
+            post: text,
+            image: imageUrl,
+            userId: user._id,
+            communityId: communitiesJoined.find(
+              (item) => item.title === selectedCommunity
+            )?._id,
+          }),
+        });
+
+        const data = await response.json();
+        if (data.status) {
+          alert("Post uploaded successfully");
+          setText("");
+          setFile(null);
+          setPreview(null);
+        } else {
+          alert("Failed to upload post");
+        }
+      } catch (error) {
+        console.error("Error uploading image:", error);
+      } finally {
+        setIsLoading(false);
+        setRefresh(false);
+      }
+    };
+
+    return (
+      <div className="flex flex-col p-2 sm:p-4 border-b border-gray-200/20">
+        <div className="flex items-center justify-center gap-4 p-2">
+          <img
+            src="https://github.com/shadcn.png"
+            className="w-10 h-10 rounded-full "
+          />
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            type="text"
+            placeholder="What do you want to share?"
+            className="w-3/4 p-4 focus:outline-none bg-black/10 text-white border-b border-gray-200/20 "
+          />
+        </div>
+
+        {file && (
+          <div className="relative w-[80%] m-4 mx-auto">
+            <img
+              src={preview ?? ""}
+              alt="Uploaded"
+              className="rounded-lg ml-2 object-cover object-center h-[400px] w-full border-2 border-gray-200/20"
+            />
+
+            <button
+              onClick={() => {
+                setFile(null);
+                setPreview(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = "";
+                }
+              }}
+              className="absolute top-2 right-0 p-2 bg-black  rounded-full"
+              style={{ boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)" }}>
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row items-center justify-between p-2 space-y-3 sm:space-y-0">
+          <div className="flex items-center gap-4 w-full sm:w-auto justify-center sm:justify-start">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              id="image"
+              ref={fileInputRef}
+              className="hidden"
+            />
+            <label
+              htmlFor="image"
+              className="text-sm flex items-center gap-2 cursor-pointer hover:text-blue-500">
+              <FileImage size={20} />
+              <span className="whitespace-nowrap">Media</span>
+            </label>
+
+            {communitiesJoined.length > 0 && (
+              <div className="relative group text-sm">
+                <button className="flex items-center gap-1 hover:text-blue-500">
+                  <span className="truncate max-w-[150px]">
+                    {selectedCommunity
+                      ? selectedCommunity
+                      : "Share to Community"}
+                  </span>
+                  <ChevronDownSquareIcon size={20} />
+                </button>
+                <div className="absolute left-0 mt-2 w-48 bg-gray-900 rounded-md shadow-lg py-1 hidden group-hover:block z-10">
+                  {communitiesJoined.map((community, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedCommunity(community.title)}
+                      className="block w-full px-4 py-2 text-sm text-left hover:bg-gray-800 truncate">
+                      {community.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            className="w-full sm:w-auto bg-white text-black px-6 py-2 rounded-full transition duration-200 hover:bg-gray-200"
+            onClick={handleSubmit}>
+            Share
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const Loading = () => {
+    return (
+      <div
+        className={`flex items-center justify-center h-full ${
+          isLoading ? "" : "hidden"
+        }`}>
+        <Loader2 className="text-white animate-spin" size={24} />
+      </div>
+    );
+  };
+
+  const Community = () => {
+    const [data, setData] = React.useState<Community[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [search, setSearch] = React.useState("");
+    const [filteredData, setFilteredData] = React.useState<Community[]>([]);
+
+    React.useEffect(() => {
+      const fetchCommunities = async () => {
+        try {
+          setIsLoading(true);
+          const response = await fetch("http://localhost:8000/community");
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch communities");
+            return;
+          }
+          setData(data.communities);
+        } catch (error) {
+          console.error("Error fetching communities:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchCommunities();
+    }, []);
+
+    React.useEffect(() => {
+      if (search) {
+        const filtered = data.filter((item) =>
+          item.title.toLowerCase().includes(search.toLowerCase())
+        );
+        setFilteredData(filtered);
+      } else {
+        setFilteredData(data);
+      }
+    }, [search, data]);
+
+    return (
+      <div
+        className={`${
+          isActiveTab !== "community" && "hidden"
+        } sm:block w-full sm:w-1/2 border-l border-gray-200/20`}
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
+        <div className="p-4">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            type="text"
+            placeholder="Search..."
+            className="w-full p-4 border-b border-gray-200/20 focus:outline-none bg-black/10"
+          />
+        </div>
+
+        <div className="flex flex-col space-y-4 mt-4 overflow-auto h-[calc(100vh-120px)]">
+          {filteredData.map((item, index) => (
+            <div
+              key={index}
+              className="flex gap-4 p-4 rounded-lg shadow-md cursor-pointer"
+              onClick={() => router.push(`/?community=${item._id}`)}>
+              <img
+                src={item.image !== "https" ? item.image : ""}
+                alt="Profile"
+                className="rounded-full w-12 h-12"
+              />
+              <div>
+                <h2 className="text-lg lg:text-lg md:text-base font-semibold">
+                  {item.title}
+                </h2>
+                <p className="text-gray-600 text-sm md:line-clamp-2 lg:line-clamp-none">
+                  {item.description}
+                </p>
+              </div>
+            </div>
+          ))}
+          {filteredData.length === 0 && (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-gray-500">No communities found</p>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="text-white animate-spin" size={24} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const Posts = ({ item }: { item: Post }) => {
+    const handleDeletePost = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/delete-post/${item._id}`,
+          {
+            method: "DELETE",
+          }
+        );
+        const data = await response.json();
+        if (data.status) {
+          alert("Post deleted successfully");
+          router.push("/");
+        } else {
+          alert("Failed to delete post");
+        }
+      } catch (error) {
+        console.error("Error deleting post:", error);
+      }
+    };
+
+    const handleLikePost = async (e: React.MouseEvent) => {
+      try {
+        e.stopPropagation();
+        e.preventDefault();
+        setIsLoading(true);
+        if (user === null) return alert("Please login to like a post");
+
+        const response = await fetch(
+          `http://localhost:8000/like/${item._id}/${user._id}`,
+          {
+            method: "POST",
+          }
+        );
+        const data = await response.json();
+        if (!data.status) {
+          alert("Failed to like post");
+        }
+      } catch (error) {
+        console.error("Error liking post:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const handleSavePost = async (e: React.MouseEvent) => {
+      try {
+        e.stopPropagation();
+        e.preventDefault();
+
+        if (user === null) return alert("Please login to save a post");
+        setIsLoading(true);
+        const response = await fetch(
+          `http://localhost:8000/save/${item._id}/${user._id}`,
+          {
+            method: "POST",
+          }
+        );
+        const data = await response.json();
+        if (!data.status) {
+          alert("Failed to save post");
+        }
+      } catch (error) {
+        console.error("Error saving post:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    return (
+      <React.Fragment>
+        <div className="border-b border-gray-200/20 p-4 flex gap-2">
+          <img
+            src={item.avatar}
+            alt="Avatar"
+            className="rounded-full w-10 h-10"
+          />
+          <div
+            className="flex flex-col w-full cursor-pointer"
+            onClick={() => router.push(`/?post=${item._id}&comments=true`)}>
+            <div className="flex items-center gap-2">
+              <h2 className="sm:text-lg text-base font-semibold">
+                {item.username}
+              </h2>
+              <span className="text-gray-500 sm:text-sm text-xs">
+                {formattedTime(item.createdAt)}
+              </span>
+              {item.isEditable && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <Trash
+                    size={16}
+                    className="text-red-500 cursor-pointer hover:text-blue-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        confirm("Are you sure you want to delete this post?")
+                      ) {
+                        handleDeletePost();
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <p className=" text-sm">{item.post}</p>
+            {item.image && (
+              <div className="flex items-end w-full ">
+                <img
+                  src={item.image}
+                  alt="Post"
+                  className="rounded-3xl mt-4 border-2 object-cover border-gray-200/20 w-[90%] mx-auto"
+                />
+              </div>
+            )}
+            <div className="flex items-center mt-2">
+              <div className="flex justify-around gap-4 w-full">
+                <div className="text-gray-500 flex items-center gap-1 cursor-pointer hover:text-blue-500">
+                  <MessageCircle size={16} />
+                  <span>{item.comment}</span>
+                </div>
+
+                <div
+                  className={` flex items-center gap-1 cursor-pointer
+                  ${
+                    item.isLiked
+                      ? "text-blue-500"
+                      : "hover:text-blue-500 text-gray-500"
+                  }
+                  `}
+                  onClick={handleLikePost}>
+                  <Heart size={16} />
+                  <span>{item.like}</span>
+                </div>
+
+                <Bookmark
+                  onClick={handleSavePost}
+                  size={20}
+                  className={`cursor-pointer hover:text-blue-500 ${
+                    item.isSaved ? "text-blue-500" : "text-gray-500"
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </React.Fragment>
+    );
+  };
+
+  const Notification = () => {
+    const [notifications, setNotifications] = React.useState<Notification[]>(
+      []
+    );
+
+    React.useEffect(() => {
+      const fetchNotifications = async () => {
+        try {
+          const response = await fetch(
+            `http://localhost:8000/notifications/${user?._id}`
+          );
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch notifications");
+            return;
+          }
+          setNotifications(data.notifications);
+        } catch (error) {
+          console.error("Error fetching notifications:", error);
+        }
+      };
+
+      if (user) {
+        fetchNotifications();
+      }
+    }, [user]);
+
+    const handleMarkAsRead = async (item: Notification) => {
+      try {
+        setRefresh(true);
+        const response = await fetch(
+          `http://localhost:8000/mark-as-read/${item._id}`,
+          {
+            method: "DELETE",
+          }
+        );
+        const data = await response.json();
+        if (data.status) {
+          const isCommunity = item.isCommunity;
+          if (isCommunity) {
+            router.push(`/?community=${item.community}`);
+          } else if (item.postId) {
+            router.push(`/?post=${item._id}&comments=true`);
+          } else {
+            router.push(`/`);
+          }
+        } else {
+          alert("Failed to mark as read");
+        }
+      } catch (error) {
+        console.error("Error marking as read:", error);
+      } finally {
+        setRefresh(false);
+      }
+    };
+
+    const handleMarkAllAsRead = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/delete-notification/${user?._id}`,
+          {
+            method: "DELETE",
+          }
+        );
+        const data = await response.json();
+        if (data.status) {
+          router.push("/");
+        } else {
+          alert("Failed to mark all as read");
+        }
+      } catch (error) {
+        console.error("Error marking all as read:", error);
+      }
+    };
+    if (!user)
+      return (
+        <div className="flex items-center justify-center h-full">
+          Please login to view notifications
+        </div>
+      );
+
+    if (notifications.length === 0)
+      return (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-gray-500">No notifications available</p>
+        </div>
+      );
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200/20">
+          <h2 className="sm:text-lg text-base font-semibold">Notifications</h2>
+          <button
+            className="text-gray-500 hover:text-blue-500"
+            onClick={handleMarkAllAsRead}
+            disabled={notifications.length === 0}>
+            Mark all as read
+          </button>
+        </div>
+        <div className="flex flex-col p-2 sm:p-4 overflow-auto h-[calc(100vh-80px)]">
+          {notifications.map((item, index) => (
+            <div
+              key={index}
+              className={`flex items-center p-4 gap-4 cursor-pointer
+            ${!item.isRead && "bg-blue-400/20 border border-blue-400/20"}
+            `}
+              onClick={() => {
+                handleMarkAsRead(item);
+              }}>
+              <img
+                src={item.avatar || "https://github.com/shadcn.png"}
+                alt="Avatar"
+                className="rounded-full w-10 h-10"
+              />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <h2 className="sm:text-lg font-semibold line-clamp-1">
+                    {item.name}
+                  </h2>
+                  <span className="text-gray-500 sm:text-sm text-xs text-nowrap">
+                    {formattedTime(item.createdAt)}
+                  </span>
+                </div>
+                <span className="text-gray-500 text-sm">{item.desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const CommunityDetails = () => {
+    const [communityDetails, setCommunityDetails] =
+      React.useState<Community | null>(null);
+    const [posts, setPosts] = React.useState<Post[]>([]);
+
+    const [selectedFilter, setSelectedFilter] = React.useState("");
+    setIsActiveTab("communityDetails");
+    React.useEffect(() => {
+      const fetchCommunityDetails = async () => {
+        try {
+          const response = await fetch(
+            `http://localhost:8000/community/${community}/${user?._id}`
+          );
+          const data = await response.json();
+
+          if (!data.status) {
+            alert("Failed to fetch community details");
+            return;
+          }
+          setCommunityDetails(data.community);
+          const posts = data.posts;
+          const savedPost = data.savedPost;
+          if (posts.length > 0) {
+            const editablePosts = posts.map((post: Post) => {
+              const isEditable = post.userId === user?._id;
+              const isLiked = user?._id ? post.liked.includes(user._id) : false;
+              const isSaved = user
+                ? savedPost.some(
+                    (_post: any) =>
+                      _post.postId === post._id && _post.userId === user._id
+                  )
+                : false;
+              return { ...post, isEditable, isLiked, isSaved };
+            });
+            setPosts(editablePosts);
+          }
+        } catch (error) {
+          console.error("Error fetching community details:", error);
+        }
+      };
+
+      if (community && community !== "undefined") {
+        fetchCommunityDetails();
+      }
+    }, [community]);
+
+    const handleJoinCommunity = async () => {
+      if (!communityDetails) return;
+      if (!user) return alert("Please login to join the community");
+      try {
+        const response = await fetch(
+          `http://localhost:8000/join-community/${communityDetails._id}/${user._id}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+        const data = await response.json();
+        if (data.status) {
+          alert("Joined community successfully");
+          setCommunityDetails(data.community);
+          setPosts(data.posts);
+        } else {
+          alert("Failed to join community");
+        }
+      } catch (error) {
+        console.error("Error joining community:", error);
+      }
+    };
+
+    const handleLeaveCommunity = async () => {
+      if (!communityDetails) return;
+      if (!user) return alert("Please login to leave the community");
+      try {
+        const response = await fetch(
+          `http://localhost:8000/leave-community/${communityDetails._id}/${user._id}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+        const data = await response.json();
+        if (data.status) {
+          alert("Left community successfully");
+          setCommunityDetails(data.community);
+          setPosts(data.posts);
+        } else {
+          alert("Failed to leave community");
+        }
+      } catch (error) {
+        console.error("Error leaving community:", error);
+      }
+    };
+
+    const handleFilterChange = (filter: string) => {
+      setSelectedFilter(filter);
+
+      let sortedPosts = [...posts];
+      switch (filter) {
+        case "latest":
+          sortedPosts.sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          break;
+        case "most-liked":
+          sortedPosts.sort((a, b) => b.like - a.like);
+          break;
+        case "most-commented":
+          sortedPosts.sort((a, b) => b.comment - a.comment);
+          break;
+        case "most-shared":
+          sortedPosts.sort((a, b) => b.share - a.share);
+          break;
+        default:
+          break;
+      }
+      setPosts(sortedPosts);
+    };
+
+    if (!communityDetails)
+      return (
+        <div className="flex items-center justify-center h-full">Not found</div>
+      );
+
+    if (!community || community === "undefined")
+      return (
+        <div className="flex items-center justify-center h-full">
+          No community selected
+        </div>
+      );
+
+    const filterButtons = (title: string, filter: string) => {
+      return (
+        <button
+          className={`px-4 py-2 rounded-full border border-gray-200/20 hover:bg-gray-800
+            ${selectedFilter === filter ? "bg-gray-800 text-white" : ""}
+            `}
+          onClick={() => handleFilterChange(filter)}>
+          {title}
+        </button>
+      );
+    };
+    return (
+      <div
+        className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
+        <div className="relative">
+          <div className="sm:h-32 h-24 w-full bg-gray-200/20 sm:rounded-xl"></div>
+          <div className="flex flex-col items-start my-8 ml-32">
+            <div className="absolute top-16 sm:top-20 left-4 bg-black p-2 rounded-full">
+              <img
+                src={communityDetails?.image}
+                className="rounded-full w-20 h-20"
+              />
+            </div>
+          </div>
+          <div className="mt-16 sm:mt-0 sm:p-2 p-4">
+            <h2 className="md:text-4xl text-lg sm:text-xl mx-auto font-semibold capitalize">
+              {communityDetails?.title}
+              <span className="text-gray-500 text-sm">
+                {"  ("}
+                {communityDetails?.members}
+                {communityDetails?.members > 1 ? " Members" : " Member"}
+                {")"}
+              </span>
+            </h2>
+            <p className="text-gray-500 text-sm mt-2">
+              {communityDetails?.description}
+            </p>
+          </div>
+          <div className="flex gap-4 mt-4 mx-4 text-sm flex-wrap">
+            {filterButtons("Latest", "latest")}
+            {filterButtons("Most Liked", "most-liked")}
+            {filterButtons("Most Commented", "most-commented")}
+            {filterButtons("Most Shared", "most-shared")}
+          </div>
+          <div className="border border-gray-200/20 rounded-lg mt-4 mb-6" />
+          {!communityDetails?.isMember ? (
+            <button
+              className="absolute sm:top-28 top-20 right-4 bg-blue-500 text-white rounded-full py-2 px-4 font-bold hover:bg-blue-600 transition-colors"
+              onClick={handleJoinCommunity}>
+              <span className="hidden md:flex">Join Community</span>
+              <span className="md:hidden flex">
+                <LogIn />
+              </span>
+            </button>
+          ) : (
+            <button
+              className="absolute sm:top-28 top-20 right-4 bg-gray-500 text-white rounded-full py-2 px-4 font-bold hover:bg-gray-600 transition-colors"
+              onClick={handleLeaveCommunity}>
+              <span className="hidden md:flex">Leave Community</span>
+              <span className="md:hidden flex">
+                <LogOut />
+              </span>
+            </button>
+          )}
+        </div>
+        {posts.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500">No posts available</p>
+          </div>
+        )}
+        {posts.map((item, index) => (
+          <Posts key={item._id} item={item} />
+        ))}
+      </div>
+    );
+  };
+
+  const Comments = ({ item }: { item: Comment }) => {
+    const handleLike = async () => {
+      try {
+        setIsLoading(true);
+        if (user === null) return alert("Please login to like a comment");
+
+        const response = await fetch(
+          `http://localhost:8000/comment-like/${item._id}/${user._id}`,
+          {
+            method: "POST",
+          }
+        );
+        const data = await response.json();
+        if (!data.status) {
+          alert("Failed to like comment");
+        }
+      } catch (error) {
+        console.error("Error liking comment:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const handleDeleteComment = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/delete-comment/${item._id}`,
+          {
+            method: "DELETE",
+          }
+        );
+        const data = await response.json();
+        if (data.status) {
+          alert("Comment deleted successfully");
+          router.push("/");
+        } else {
+          alert("Failed to delete comment");
+        }
+      } catch (error) {
+        console.error("Error deleting comment:", error);
+      }
+    };
+
+    return (
+      <div className="border-b border-gray-200/20 p-4 flex gap-2">
+        <img
+          src={item.avatar}
+          alt="Avatar"
+          className="rounded-full w-10 h-10"
         />
+        <div className="flex flex-col w-full">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">{item.username}</h2>
+            <span className="text-gray-500 text-sm">
+              {formattedTime(item.createdAt)}
+            </span>
+            {item.isEditable && (
+              <span className="text-gray-500 text-sm ml-auto">
+                <Trash
+                  size={16}
+                  className="text-red-500 cursor-pointer"
+                  onClick={() => {
+                    if (
+                      confirm("Are you sure you want to delete this comment?")
+                    ) {
+                      handleDeleteComment();
+                    }
+                  }}
+                />
+              </span>
+            )}
+          </div>
+          <p className=" text-sm">{item.comment}</p>
+          {item.image && (
+            <div className="flex items-end w-full ">
+              <img
+                src={item.image}
+                alt="Post"
+                className="rounded-3xl mt-4 border-2 object-cover border-gray-200/20 w-[90%] mx-auto"
+              />
+            </div>
+          )}
+          <div
+            className={` flex items-center gap-1 cursor-pointer 
+              ${
+                item.isLiked
+                  ? "text-blue-500"
+                  : "hover:text-blue-500 text-gray-500"
+              }
+              `}
+            onClick={handleLike}>
+            <Heart size={16} />
+            <span>{item.likes}</span>
+          </div>
+        </div>
       </div>
+    );
+  };
 
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
+  const Profile = () => {
+    const [UserDetails, setUserDetails] = React.useState<User | null>(null);
+    const [posts, setPosts] = React.useState<Post[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
 
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
+    React.useEffect(() => {
+      const fetchUserDetails = async () => {
+        try {
+          if (!user) return;
+          setIsLoading(true);
+          const response = await fetch(
+            `http://localhost:8000/user/${user?._id}`
+          );
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch user details");
+            return;
+          }
+          setUserDetails(data.user);
+          const posts = data.posts;
+          const savedPost = data.savedPost;
+          if (posts.length > 0) {
+            const editablePosts = posts.map((post: Post) => {
+              const isEditable = post.userId === user?._id;
+              const isLiked = post.liked.includes(user._id);
+              const isSaved = user
+                ? savedPost.some(
+                    (_post: any) =>
+                      _post.postId === post._id && _post.userId === user._id
+                  )
+                : false;
+              return { ...post, isEditable, isLiked , isSaved };
+            });
+            setPosts(editablePosts);
+          }
+        } catch (error) {
+          console.error("Error fetching user details:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
 
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
+      fetchUserDetails();
+    }, [user]);
 
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
+    if (!UserDetails)
+      return (
+        <div className="flex items-center justify-center h-full">Not found</div>
+      );
+
+    return (
+      <div
+        className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#4B5563 #1F2937" }}>
+        {isLoading && <Loading />}
+        <div className="relative">
+          <div className="sm:h-32 h-24 w-full bg-gray-200/20 sm:rounded-xl"></div>
+          <div className="flex flex-col items-start my-8 ml-32">
+            <div className="absolute sm:bottom-12 bottom-10 left-4 bg-black p-2 rounded-full">
+              <img
+                src={UserDetails?.picture}
+                // src="https://github.com/shadcn.png"
+                className="rounded-full w-24 h-24"
+              />
+            </div>
+            <h2 className="sm:text-3xl text-xl relative sm:left-5 -top-2 font-semibold capitalize">
+              {UserDetails?.name}
+            </h2>
+          </div>
+
+          <div className="border border-gray-200/20 rounded-lg mt-4 mb-4" />
+        </div>
+        {posts.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500">No posts available</p>
+          </div>
+        )}
+        {posts.map((item, index) => (
+          <Posts key={item._id} item={item} />
+        ))}
       </div>
-    </main>
+    );
+  };
+
+  const MobileSideBar = () => {
+    const login = useGoogleLogin({
+      onSuccess: async (tokenResponse) => {
+        try {
+          setIsLoading(true);
+          // Get user info from Google
+          const userInfoResponse = await fetch(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            {
+              headers: {
+                Authorization: `Bearer ${tokenResponse.access_token}`,
+              },
+            }
+          );
+          const userInfo = await userInfoResponse.json();
+
+          // Login to your backend
+          const response = await fetch("http://localhost:8000/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: userInfo.email,
+              password: userInfo.sub + userInfo.email,
+              name: userInfo.name,
+              picture: userInfo.picture,
+            }),
+          });
+          const data = await response.json();
+          if (data.status) {
+            setUser(data.user);
+          }
+        } catch (error) {
+          console.error("Error during login:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      onError: () => {
+        console.error("Login Failed");
+        setUser(null);
+      },
+    });
+
+    return (
+      <div className="sm:hidden absolute bottom-2 w-[90%] left-[5%]  bg-gray-500/20 backdrop-blur-md rounded-2xl p-4">
+        <div className="flex items-center justify-between">
+          <Home
+            size={24}
+            className="text-white"
+            onClick={() => {
+              router.push("/");
+              setIsActiveTab("feed");
+            }}
+          />
+          <BellDot
+            size={24}
+            className="text-white"
+            onClick={() => setIsActiveTab("notification")}
+          />
+
+          <Users
+            onClick={() => setIsActiveTab("community")}
+            size={24}
+            className="text-white"
+          />
+          <CircleUser
+            size={24}
+            className="text-white"
+            onClick={() => {
+              if (!user) alert("Please login to view profile");
+              setIsActiveTab("profile");
+              router.push("/?profile=true");
+            }}
+          />
+
+          {!user ? (
+            <button
+              className=""
+              onClick={() => {
+                login();
+              }}>
+              {/* <GoogleLogin
+                onSuccess={async (credentialResponse) => {
+                  const decoded: any = jwtDecode(
+                    credentialResponse.credential!!
+                  );
+                  try {
+                    setIsLoading(true);
+                    const response = await fetch(
+                      "http://localhost:8000/login",
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                          email: decoded.email,
+                          password: decoded.sub + decoded.email,
+                          name: decoded.name,
+                          picture: decoded.picture,
+                        }),
+                      }
+                    );
+                    const data = await response.json();
+                    if (data.status) {
+                      setUser(data.user);
+                    }
+                  } catch (error) {
+                    console.error("Error during login:", error);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                onError={() => {
+                  setUser(null);
+                }}
+                size="medium"
+                text="signin"
+                shape="circle"
+                type="standard"
+              /> */}
+
+              {isLoading ? (
+                <Loader2 className="text-white animate-spin" size={24} />
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-8 h-8"
+                  viewBox="0 0 48 48">
+                  <path
+                    fill="#FFC107"
+                    d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
+                  <path
+                    fill="#FF3D00"
+                    d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path>
+                  <path
+                    fill="#4CAF50"
+                    d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path>
+                  <path
+                    fill="#1976D2"
+                    d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path>
+                </svg>
+              )}
+            </button>
+          ) : (
+            <LogOut
+              size={24}
+              className="text-white cursor-pointer"
+              onClick={() => {
+                setUser(null);
+                googleLogout();
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const SavedPost = () => {
+    const [posts, setPosts] = React.useState<Post[]>([]);
+    const [isLoading, setIsLoading] = React.useState(false);
+
+    React.useEffect(() => {
+      const fetchUserDetails = async () => {
+        try {
+          if (!user) return;
+          setIsLoading(true);
+          const response = await fetch(
+            `http://localhost:8000/saved/${user?._id}`
+          );
+          const data = await response.json();
+          if (!data.status) {
+            alert("Failed to fetch user details");
+            return;
+          }
+          const posts = data.posts;
+          if (posts.length > 0) {
+            const editablePosts = posts.map((post: Post) => {
+              const isEditable = post.userId === user?._id;
+              const isLiked = post.liked.includes(user._id);
+              return { ...post, isEditable, isLiked };
+            });
+            setPosts(editablePosts);
+          }
+        } catch (error) {
+          console.error("Error fetching user details:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchUserDetails();
+    }, [user]);
+
+    return (
+      <div className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4">
+        {posts.map((item, index) => (
+          <Posts key={item._id} item={item} />
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <GoogleOAuthProvider
+      clientId={
+        "977456214845-phj8buipiqfrv20p89e7h94s0c4u18mq.apps.googleusercontent.com"
+      }>
+      <main className="flex h-screen items-center justify-between ">
+        <Sidebar />
+        <MobileSideBar />
+        {community ? (
+          <CommunityDetails />
+        ) : postId && commentOpen ? (
+          <PostWithComments />
+        ) : profile && user !== null ? (
+          <Profile />
+        ) : 
+          saved && user !== null ? (
+          <SavedPost />
+          ) :
+        (
+          <Feed />
+        )}
+        <Community />
+      </main>
+    </GoogleOAuthProvider>
   );
 }
