@@ -98,7 +98,7 @@ const formattedTime = (time: string) => {
   }
 };
 
-export default function Layout() {
+export default function Page() {
   const [user, setUser] = React.useState<User | null>(null);
   const [isActiveTab, setIsActiveTab] = React.useState("feed");
   const searchParams = useSearchParams();
@@ -128,7 +128,7 @@ export default function Layout() {
           const userInfo = await userInfoResponse.json();
 
           // Login to your backend
-          const response = await fetch("http://localhost:8000/login", {
+          const response = await fetch("https://ai-gallery-backend.vercel.app/login", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -280,7 +280,7 @@ export default function Layout() {
         try {
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/posts/${user?._id}`
+            `https://ai-gallery-backend.vercel.app/posts/${user?._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -361,7 +361,7 @@ export default function Layout() {
         try {
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/comments/${postId}/${user?._id}`
+            `https://ai-gallery-backend.vercel.app/comments/${postId}/${user?._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -386,7 +386,7 @@ export default function Layout() {
 
       try {
         const response = await fetch(
-          `http://localhost:8000/comment/${postId}`,
+          `https://ai-gallery-backend.vercel.app/comment/${postId}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -428,6 +428,7 @@ export default function Layout() {
             Submit
           </button>
         </div>
+
         {comments.map((item, index) => (
           <div
             key={index}
@@ -469,7 +470,7 @@ export default function Layout() {
         try {
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/my-communities/${user._id}`
+            `https://ai-gallery-backend.vercel.app/my-communities/${user._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -532,7 +533,7 @@ export default function Layout() {
           imageUrl = uploadData.secure_url;
         }
 
-        const response = await fetch("http://localhost:8000/upload", {
+        const response = await fetch("https://ai-gallery-backend.vercel.app/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -668,7 +669,7 @@ export default function Layout() {
       const fetchCommunities = async () => {
         try {
           setIsLoading(true);
-          const response = await fetch("http://localhost:8000/community");
+          const response = await fetch("https://ai-gallery-backend.vercel.app/community");
           const data = await response.json();
           if (!data.status) {
             alert("Failed to fetch communities");
@@ -764,7 +765,7 @@ export default function Layout() {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `http://localhost:8000/delete-post/${item._id}`,
+          `https://ai-gallery-backend.vercel.app/delete-post/${item._id}`,
           {
             method: "DELETE",
           }
@@ -791,7 +792,7 @@ export default function Layout() {
         if (user === null) return alert("Please login to like a post");
 
         const response = await fetch(
-          `http://localhost:8000/like/${item._id}/${user._id}`,
+          `https://ai-gallery-backend.vercel.app/like/${item._id}/${user._id}`,
           {
             method: "POST",
           }
@@ -829,7 +830,7 @@ export default function Layout() {
         if (user === null) return alert("Please login to save a post");
         setIsLoading(true);
         const response = await fetch(
-          `http://localhost:8000/save/${item._id}/${user._id}`,
+          `https://ai-gallery-backend.vercel.app/save/${item._id}/${user._id}`,
           {
             method: "POST",
           }
@@ -952,7 +953,7 @@ export default function Layout() {
       const fetchNotifications = async () => {
         try {
           const response = await fetch(
-            `http://localhost:8000/notifications/${user?._id}`
+            `https://ai-gallery-backend.vercel.app/notifications/${user?._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -973,7 +974,7 @@ export default function Layout() {
     const handleMarkAsRead = async (item: Notification) => {
       try {
         const response = await fetch(
-          `http://localhost:8000/mark-as-read/${item._id}`,
+          `https://ai-gallery-backend.vercel.app/mark-as-read/${item._id}`,
           {
             method: "DELETE",
           }
@@ -999,7 +1000,7 @@ export default function Layout() {
     const handleMarkAllAsRead = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/delete-notification/${user?._id}`,
+          `https://ai-gallery-backend.vercel.app/delete-notification/${user?._id}`,
           {
             method: "DELETE",
           }
@@ -1086,7 +1087,7 @@ export default function Layout() {
         try {
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/community/${community}/${user?._id}`
+            `https://ai-gallery-backend.vercel.app/community/${community}/${user?._id}`
           );
           const data = await response.json();
 
@@ -1114,7 +1115,7 @@ export default function Layout() {
       if (!user) return alert("Please login to join the community");
       try {
         const response = await fetch(
-          `http://localhost:8000/join-community/${communityDetails._id}/${user._id}`,
+          `https://ai-gallery-backend.vercel.app/join-community/${communityDetails._id}/${user._id}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1138,7 +1139,7 @@ export default function Layout() {
       if (!user) return alert("Please login to leave the community");
       try {
         const response = await fetch(
-          `http://localhost:8000/leave-community/${communityDetails._id}/${user._id}`,
+          `https://ai-gallery-backend.vercel.app/leave-community/${communityDetails._id}/${user._id}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1262,7 +1263,7 @@ export default function Layout() {
             </button>
           )}
         </div>
-        {posts.length === 0 && (
+        {posts.length === 0 && !isLoading  && (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">No posts available</p>
           </div>
@@ -1291,7 +1292,7 @@ export default function Layout() {
         if (user === null) return alert("Please login to like a comment");
 
         const response = await fetch(
-          `http://localhost:8000/comment-like/${item._id}/${user._id}`,
+          `https://ai-gallery-backend.vercel.app/comment-like/${item._id}/${user._id}`,
           {
             method: "POST",
           }
@@ -1323,7 +1324,7 @@ export default function Layout() {
     const handleDeleteComment = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/delete-comment/${item._id}`,
+          `https://ai-gallery-backend.vercel.app/delete-comment/${item._id}`,
           {
             method: "DELETE",
           }
@@ -1413,7 +1414,7 @@ export default function Layout() {
           if (!user) return;
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/user-profile/${user?._id}`
+            `https://ai-gallery-backend.vercel.app/user-profile/${user?._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -1465,7 +1466,7 @@ export default function Layout() {
 
           <div className="border border-gray-200/20 rounded-lg mt-4 mb-4" />
         </div>
-        {posts.length === 0 && (
+        {posts.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">No posts available</p>
           </div>
@@ -1495,7 +1496,7 @@ export default function Layout() {
           const userInfo = await userInfoResponse.json();
 
           // Login to your backend
-          const response = await fetch("http://localhost:8000/login", {
+          const response = await fetch("https://ai-gallery-backend.vercel.app/login", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -1579,7 +1580,7 @@ export default function Layout() {
                   try {
                     setIsLoading(true);
                     const response = await fetch(
-                      "http://localhost:8000/login",
+                      "https://ai-gallery-backend.vercel.app/login",
                       {
                         method: "POST",
                         headers: {
@@ -1659,7 +1660,7 @@ export default function Layout() {
           if (!user) return;
           setIsLoading(true);
           const response = await fetch(
-            `http://localhost:8000/saved/${user?._id}`
+            `https://ai-gallery-backend.vercel.app/saved/${user?._id}`
           );
           const data = await response.json();
           if (!data.status) {
@@ -1691,7 +1692,7 @@ export default function Layout() {
           </div>
         )}
 
-        {posts.length === 0 && (
+        {posts.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">No saved posts available</p>
           </div>
