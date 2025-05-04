@@ -128,18 +128,21 @@ export default function Page() {
           const userInfo = await userInfoResponse.json();
 
           // Login to your backend
-          const response = await fetch("https://ai-gallery-backend.vercel.app/login", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              email: userInfo.email,
-              password: userInfo.sub + userInfo.email,
-              name: userInfo.name,
-              picture: userInfo.picture,
-            }),
-          });
+          const response = await fetch(
+            "https://ai-gallery-backend.vercel.app/login",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                email: userInfo.email,
+                password: userInfo.sub + userInfo.email,
+                name: userInfo.name,
+                picture: userInfo.picture,
+              }),
+            }
+          );
           const data = await response.json();
           if (data.status) {
             setUser(data.user);
@@ -382,9 +385,13 @@ export default function Page() {
     }, [postId]);
 
     const handleCommentSubmit = async () => {
-      if (!user) return alert("Please login to comment");
+      if (!user) {
+        alert("Please login to comment");
+        return;
+      }
 
       try {
+        setIsLoading(true);
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/comment/${postId}`,
           {
@@ -399,53 +406,51 @@ export default function Page() {
 
         const data = await response.json();
 
-        if (data.status) {
-          alert("Comment added successfully");
-          setComments((prev) => [...prev, data.comment]);
-          setComment("");
-        } else {
+
+        if (!data.status) {
           alert("Failed to add comment");
+          return;
         }
+        router.refresh();
       } catch (error) {
         console.error("Error adding comment:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     return (
       <div className="w-full h-screen border-l border-gray-200/20 overflow-auto">
         {post && <Posts item={post} refresh={true} />}
-        <div className="flex p-4 border-b gap-4 border-gray-200/20">
-          <input
-            type="text"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Add a comment..."
-            className="w-full p-4 border-b border-gray-200/20 focus:outline-none bg-black/10"
-          />
-          <button
-            onClick={() => handleCommentSubmit()}
-            className="bg-blue-500 text-white px-4 py-2 rounded-full mt-2">
-            Submit
-          </button>
-        </div>
-
-        {comments.map((item, index) => (
-          <div
-            key={index}
-            className="flex flex-col border-b border-gray-200/20">
-            <Comments
-              item={item}
-              setComments={setComments}
-              comments={comments}
-            />
-          </div>
-        ))}
-
-        {isLoading && (
+        {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="text-white animate-spin" size={24} />
           </div>
+        ) : (
+          <div className="flex p-4 border-b gap-4 border-gray-200/20">
+            <input
+              type="text"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Add a comment..."
+              className="w-full p-4 border-b border-gray-200/20 focus:outline-none bg-black/10"
+            />
+            <button
+              onClick={() => handleCommentSubmit()}
+              disabled={isLoading}
+              className="bg-blue-500 text-white px-4 py-2 rounded-full mt-2">
+              Submit
+            </button>
+          </div>
         )}
+
+        {!isLoading && comments.map((item, index) => (
+          <div
+            key={index}
+            className="flex flex-col border-b border-gray-200/20">
+            <Comments item={item} setComments={setComments} />
+          </div>
+        ))}
       </div>
     );
   };
@@ -455,6 +460,7 @@ export default function Page() {
     const [preview, setPreview] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(false);
     const [text, setText] = React.useState("");
+    const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
     const [communitiesJoined, setCommunitiesJoined] = React.useState<
       {
         _id: string;
@@ -480,7 +486,7 @@ export default function Page() {
           setCommunitiesJoined(data.communities);
         } catch (error) {
           console.error("Error fetching communities:", error);
-        }finally {
+        } finally {
           setIsLoading(false);
         }
       };
@@ -509,7 +515,10 @@ export default function Page() {
     };
 
     const handleSubmit = async () => {
-      if (!user) return alert("Please login to upload a post");
+      if (!user) {
+        alert("Please login to upload a post");
+        return;
+      }
 
       try {
         setIsLoading(true);
@@ -533,20 +542,23 @@ export default function Page() {
           imageUrl = uploadData.secure_url;
         }
 
-        const response = await fetch("https://ai-gallery-backend.vercel.app/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: user.name,
-            avatar: user.picture,
-            post: text,
-            image: imageUrl,
-            userId: user._id,
-            communityId: communitiesJoined.find(
-              (item) => item.title === selectedCommunity
-            )?._id,
-          }),
-        });
+        const response = await fetch(
+          "https://ai-gallery-backend.vercel.app/upload",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              username: user.name,
+              avatar: user.picture,
+              post: text,
+              image: imageUrl,
+              userId: user._id,
+              communityId: communitiesJoined.find(
+                (item) => item.title === selectedCommunity
+              )?._id,
+            }),
+          }
+        );
 
         const data = await response.json();
         if (data.status) {
@@ -622,8 +634,10 @@ export default function Page() {
             </label>
 
             {communitiesJoined.length > 0 && (
-              <div className="relative group text-sm">
-                <button className="flex items-center gap-1 hover:text-blue-500">
+              <div className="relative text-sm">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center gap-1 hover:text-blue-500">
                   <span className="truncate max-w-[150px]">
                     {selectedCommunity
                       ? selectedCommunity
@@ -631,16 +645,21 @@ export default function Page() {
                   </span>
                   <ChevronDownSquareIcon size={20} />
                 </button>
-                <div className="absolute left-0 mt-2 w-48 bg-gray-900 rounded-md shadow-lg py-1 hidden group-hover:block z-10">
-                  {communitiesJoined.map((community, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setSelectedCommunity(community.title)}
-                      className="block w-full px-4 py-2 text-sm text-left hover:bg-gray-800 truncate">
-                      {community.title}
-                    </button>
-                  ))}
-                </div>
+                {isDropdownOpen && (
+                  <div className="absolute left-0 mt-2 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-10">
+                    {communitiesJoined.map((community, index) => (
+                      <button
+                        key={index}
+                        onClick={() => {
+                          setSelectedCommunity(community.title);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="block w-full px-4 py-2 text-sm text-left hover:bg-gray-800 truncate">
+                        {community.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -650,7 +669,7 @@ export default function Page() {
             onClick={handleSubmit}
             disabled={isLoading || !text.trim()}>
             {isLoading && (
-              <Loader2 className="text-white animate-spin" size={24} />
+              <Loader2 className="text-black animate-spin" size={24} />
             )}
             {!isLoading && "Share"}
           </button>
@@ -669,7 +688,9 @@ export default function Page() {
       const fetchCommunities = async () => {
         try {
           setIsLoading(true);
-          const response = await fetch("https://ai-gallery-backend.vercel.app/community");
+          const response = await fetch(
+            "https://ai-gallery-backend.vercel.app/community"
+          );
           const data = await response.json();
           if (!data.status) {
             alert("Failed to fetch communities");
@@ -779,7 +800,7 @@ export default function Page() {
         }
       } catch (error) {
         console.error("Error deleting post:", error);
-      }finally {
+      } finally {
         setIsLoading(false);
       }
     };
@@ -789,7 +810,10 @@ export default function Page() {
         e.stopPropagation();
         e.preventDefault();
         setIsLoading(true);
-        if (user === null) return alert("Please login to like a post");
+        if (user === null) {
+          alert("Please login to like a post");
+          return;
+        }
 
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/like/${item._id}/${user._id}`,
@@ -827,7 +851,10 @@ export default function Page() {
         e.stopPropagation();
         e.preventDefault();
 
-        if (user === null) return alert("Please login to save a post");
+        if (user === null) {
+          alert("Please login to save a post");
+          return;
+        }
         setIsLoading(true);
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/save/${item._id}/${user._id}`,
@@ -1112,7 +1139,10 @@ export default function Page() {
 
     const handleJoinCommunity = async () => {
       if (!communityDetails) return;
-      if (!user) return alert("Please login to join the community");
+      if (!user) {
+        alert("Please login to join the community");
+        return;
+      }
       try {
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/join-community/${communityDetails._id}/${user._id}`,
@@ -1136,7 +1166,10 @@ export default function Page() {
 
     const handleLeaveCommunity = async () => {
       if (!communityDetails) return;
-      if (!user) return alert("Please login to leave the community");
+      if (!user) {
+        return;
+        alert("Please login to leave the community");
+      }
       try {
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/leave-community/${communityDetails._id}/${user._id}`,
@@ -1263,7 +1296,7 @@ export default function Page() {
             </button>
           )}
         </div>
-        {posts.length === 0 && !isLoading  && (
+        {posts.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">No posts available</p>
           </div>
@@ -1278,18 +1311,19 @@ export default function Page() {
   const Comments = ({
     item,
     setComments,
-    comments,
   }: {
     item: Comment;
     setComments: React.Dispatch<React.SetStateAction<Comment[]>>;
-    comments: Comment[];
   }) => {
     const [isLoading, setIsLoading] = React.useState(false);
 
     const handleLike = async () => {
       try {
         setIsLoading(true);
-        if (user === null) return alert("Please login to like a comment");
+        if (user === null) {
+          alert("Please login to like a comment");
+          return;
+        }
 
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/comment-like/${item._id}/${user._id}`,
@@ -1330,12 +1364,14 @@ export default function Page() {
           }
         );
         const data = await response.json();
-        if (data.status) {
-          alert("Comment deleted successfully");
-          router.push("/");
-        } else {
+        if (!data.status) {
           alert("Failed to delete comment");
+          return;
         }
+        setComments((prevComments) =>
+          prevComments.filter((comment) => comment._id !== item._id)
+        );
+        alert("Comment deleted successfully");
       } catch (error) {
         console.error("Error deleting comment:", error);
       }
@@ -1496,18 +1532,21 @@ export default function Page() {
           const userInfo = await userInfoResponse.json();
 
           // Login to your backend
-          const response = await fetch("https://ai-gallery-backend.vercel.app/login", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              email: userInfo.email,
-              password: userInfo.sub + userInfo.email,
-              name: userInfo.name,
-              picture: userInfo.picture,
-            }),
-          });
+          const response = await fetch(
+            "https://ai-gallery-backend.vercel.app/login",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                email: userInfo.email,
+                password: userInfo.sub + userInfo.email,
+                name: userInfo.name,
+                picture: userInfo.picture,
+              }),
+            }
+          );
           const data = await response.json();
           if (data.status) {
             setUser(data.user);
@@ -1550,7 +1589,10 @@ export default function Page() {
             size={24}
             className="text-white"
             onClick={() => {
-              if (!user) return alert("Please login to view profile");
+              if (!user) {
+                alert("Please login to view your profile");
+                return;
+              }
               setIsActiveTab("profile");
               router.push("/?profile=true");
             }}
@@ -1560,7 +1602,10 @@ export default function Page() {
             size={24}
             className="text-white"
             onClick={() => {
-              if (!user) return alert("Please login to view saved posts");
+              if (!user) {
+                alert("Please login to view saved posts");
+                return;
+              }
               setIsActiveTab("saved");
               router.push("/?saved=true");
             }}
@@ -1698,7 +1743,7 @@ export default function Page() {
           </div>
         )}
         {posts.map((item, index) => (
-          <Posts setPosts={setPosts}  key={item._id} item={item} />
+          <Posts setPosts={setPosts} key={item._id} item={item} />
         ))}
       </div>
     );

@@ -184,7 +184,6 @@ app.get("/comments/:id/:userId", async (req, res) => {
     let savedPost = null;
 
     if (userId !== "undefined") {
-      console.log("userId", userId);
       savedPost = await Saved.findOne({
         postId: id,
         userId,
