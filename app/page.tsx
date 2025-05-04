@@ -406,7 +406,6 @@ export default function Page() {
 
         const data = await response.json();
 
-
         if (!data.status) {
           alert("Failed to add comment");
           return;
@@ -444,13 +443,14 @@ export default function Page() {
           </div>
         )}
 
-        {!isLoading && comments.map((item, index) => (
-          <div
-            key={index}
-            className="flex flex-col border-b border-gray-200/20">
-            <Comments item={item} setComments={setComments} />
-          </div>
-        ))}
+        {!isLoading &&
+          comments.map((item, index) => (
+            <div
+              key={index}
+              className="flex flex-col border-b border-gray-200/20">
+              <Comments item={item} setComments={setComments} />
+            </div>
+          ))}
       </div>
     );
   };
@@ -628,7 +628,7 @@ export default function Page() {
             />
             <label
               htmlFor="image"
-              className="text-sm flex items-center gap-2 cursor-pointer hover:text-blue-500">
+              className="text-sm flex items-center gap-2 cursor-pointer hover:text-blue-300">
               <FileImage size={20} />
               <span className="whitespace-nowrap">Media</span>
             </label>
@@ -637,7 +637,7 @@ export default function Page() {
               <div className="relative text-sm">
                 <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex items-center gap-1 hover:text-blue-500">
+                  className="flex items-center gap-1 hover:text-blue-300">
                   <span className="truncate max-w-[150px]">
                     {selectedCommunity
                       ? selectedCommunity
@@ -913,7 +913,7 @@ export default function Page() {
                 <div className="flex items-center gap-2 ml-auto">
                   <Trash
                     size={16}
-                    className="text-red-500 cursor-pointer hover:text-blue-500"
+                    className="text-red-500 cursor-pointer hover:text-blue-300"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (
@@ -938,7 +938,7 @@ export default function Page() {
             )}
             <div className="flex items-center mt-2">
               <div className="flex justify-around gap-4 w-full">
-                <div className="text-gray-500 flex items-center gap-1 cursor-pointer hover:text-blue-500">
+                <div className="text-gray-500 flex items-center gap-1 cursor-pointer hover:text-blue-300">
                   <MessageCircle size={16} />
                   <span>{item.comment}</span>
                 </div>
@@ -948,7 +948,7 @@ export default function Page() {
                   ${
                     item.isLiked
                       ? "text-blue-500"
-                      : "hover:text-blue-500 text-gray-500"
+                      : "hover:text-blue-300 text-gray-500"
                   }
                   `}
                   onClick={handleLikePost}>
@@ -959,7 +959,7 @@ export default function Page() {
                 <Bookmark
                   onClick={handleSavePost}
                   size={20}
-                  className={`cursor-pointer hover:text-blue-500 ${
+                  className={`cursor-pointer hover:text-blue-300 ${
                     item.isSaved ? "text-blue-500" : "text-gray-500"
                   }`}
                 />
@@ -975,10 +975,11 @@ export default function Page() {
     const [notifications, setNotifications] = React.useState<Notification[]>(
       []
     );
-
+    const [isLoading, setIsLoading] = React.useState(false);
     React.useEffect(() => {
       const fetchNotifications = async () => {
         try {
+          setIsLoading(true);
           const response = await fetch(
             `https://ai-gallery-backend.vercel.app/notifications/${user?._id}`
           );
@@ -990,6 +991,8 @@ export default function Page() {
           setNotifications(data.notifications);
         } catch (error) {
           console.error("Error fetching notifications:", error);
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -1000,19 +1003,22 @@ export default function Page() {
 
     const handleMarkAsRead = async (item: Notification) => {
       try {
+        setIsLoading(true);
         const response = await fetch(
-          `https://ai-gallery-backend.vercel.app/mark-as-read/${item._id}`,
+          // `https://ai-gallery-backend.vercel.app/mark-as-read/${item._id}`,
+          `http://localhost:8000/mark-as-read/${item._id}`,
           {
             method: "DELETE",
           }
         );
         const data = await response.json();
+        console.log(data);
         if (data.status) {
           const isCommunity = item.isCommunity;
           if (isCommunity) {
             router.push(`/?community=${item.community}`);
           } else if (item.postId) {
-            router.push(`/?post=${item._id}&comments=true`);
+            router.push(`/?post=${item.postId}&comments=true`);
           } else {
             router.push(`/`);
           }
@@ -1021,11 +1027,14 @@ export default function Page() {
         }
       } catch (error) {
         console.error("Error marking as read:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     const handleMarkAllAsRead = async () => {
       try {
+        setIsLoading(true);
         const response = await fetch(
           `https://ai-gallery-backend.vercel.app/delete-notification/${user?._id}`,
           {
@@ -1040,6 +1049,8 @@ export default function Page() {
         }
       } catch (error) {
         console.error("Error marking all as read:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
     if (!user)
@@ -1049,53 +1060,61 @@ export default function Page() {
         </div>
       );
 
-    if (notifications.length === 0)
-      return (
-        <div className="flex items-center justify-center h-full">
-          <p className="text-gray-500">No notifications available</p>
-        </div>
-      );
-
     return (
       <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200/20">
-          <h2 className="sm:text-lg text-base font-semibold">Notifications</h2>
-          <button
-            className="text-gray-500 hover:text-blue-500"
-            onClick={handleMarkAllAsRead}
-            disabled={notifications.length === 0}>
-            Mark all as read
-          </button>
-        </div>
-        <div className="flex flex-col p-2 sm:p-4 overflow-auto h-[calc(100vh-80px)]">
-          {notifications.map((item, index) => (
-            <div
-              key={index}
-              className={`flex items-center p-4 gap-4 cursor-pointer
-            ${!item.isRead && "bg-blue-400/20 border border-blue-400/20"}
-            `}
-              onClick={() => {
-                handleMarkAsRead(item);
-              }}>
-              <img
-                src={item.avatar || "https://github.com/shadcn.png"}
-                alt="Avatar"
-                className="rounded-full w-10 h-10"
-              />
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <h2 className="sm:text-lg font-semibold line-clamp-1">
-                    {item.name}
-                  </h2>
-                  <span className="text-gray-500 sm:text-sm text-xs text-nowrap">
-                    {formattedTime(item.createdAt)}
-                  </span>
-                </div>
-                <span className="text-gray-500 text-sm">{item.desc}</span>
-              </div>
+        {!isLoading && notifications.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500">No notifications available</p>
+          </div>
+        )}
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="text-white animate-spin" size={24} />
+          </div>
+        ) : (
+          <React.Fragment>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200/20">
+              <h2 className="sm:text-lg text-base font-semibold">
+                Notifications
+              </h2>
+              <button
+                className="text-gray-500 hover:text-blue-300"
+                onClick={handleMarkAllAsRead}
+                disabled={notifications.length === 0}>
+                Mark all as read
+              </button>
             </div>
-          ))}
-        </div>
+            <div className="flex flex-col p-2 sm:p-4 overflow-auto h-[calc(100vh-80px)]">
+              {notifications.map((item, index) => (
+                <div
+                  key={index}
+                  className={`flex items-center p-4 gap-4 cursor-pointer
+              ${!item.isRead && "bg-blue-400/20 border border-blue-400/20"}
+              `}
+                  onClick={() => {
+                    handleMarkAsRead(item);
+                  }}>
+                  <img
+                    src={item.avatar || "https://github.com/shadcn.png"}
+                    alt="Avatar"
+                    className="rounded-full w-10 h-10"
+                  />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <h2 className="sm:text-lg font-semibold line-clamp-1">
+                        {item.name}
+                      </h2>
+                      <span className="text-gray-500 sm:text-sm text-xs text-nowrap">
+                        {formattedTime(item.createdAt)}
+                      </span>
+                    </div>
+                    <span className="text-gray-500 text-sm">{item.desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </React.Fragment>
+        )}
       </div>
     );
   };
@@ -1241,7 +1260,7 @@ export default function Page() {
               No community selected
             </div>
           ))}
-        {!communityDetails && (
+        {!communityDetails && !isLoading && (
           <div className="flex items-center justify-center h-full">
             No community found
           </div>
@@ -1427,7 +1446,7 @@ export default function Page() {
               ${
                 item.isLiked
                   ? "text-blue-500"
-                  : "hover:text-blue-500 text-gray-500"
+                  : "hover:text-blue-300 text-gray-500"
               }
               `}
             onClick={handleLike}>
