@@ -11,6 +11,7 @@ import {
   LogIn,
   LogOut,
   MessageCircle,
+  Pen,
   Sparkles,
   Trash,
   Users,
@@ -25,9 +26,9 @@ import {
 import React from "react";
 import { backendUrl } from "./backend";
 import { toast } from "react-hot-toast";
-console.log(backendUrl);
+import DialogBox from "./dialogbox";
 
-type User = {
+export type User = {
   email: string;
   name: string;
   picture: string;
@@ -247,29 +248,36 @@ export default function Page() {
               title="AI Post"
               icon={<Sparkles size={24} />}
               onClick={async () => {
-                if (!user) {
-                  toast.error("Please login to generate posts");
-                  return;
-                }
-                toast.loading("Generating a random post...");
-                const response = await fetch(
-                  `${backendUrl}/create-random-post`,
-                  {
-                    method: "GET",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization: `Bearer ${user.token}`,
-                    },
+                try {
+                  if (!user) {
+                    toast.error("Please login to generate posts");
+                    return;
                   }
-                );
-                const data = await response.json();
-                toast.dismiss();
-                if (!data.status) {
-                  toast.error("Failed to generate post");
-                  return;
+                  toast.loading("Generating a random post...");
+                  const response = await fetch(
+                    `${backendUrl}/create-random-post`,
+                    {
+                      method: "GET",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${user.token}`,
+                      },
+                    }
+                  );
+                  const data = await response.json();
+                  toast.dismiss();
+                  if (!data.status) {
+                    toast.error("Failed to generate post");
+                    return;
+                  }
+                  toast.success("Post generated successfully");
+                  router.push(`/?post=${data.post._id}&comments=true`);
+                } catch (error) {
+                  toast.dismiss();
+                  console.error("Error generating post:", error);
+                  toast.error("Error generating post");
                 }
-                toast.success("Post generated successfully");
-                router.push(`/?post=${data.post._id}&comments=true`);
+
                 // router.push("/?generate=true");
               }}
             />
@@ -437,6 +445,11 @@ export default function Page() {
 
       try {
         setIsLoading(true);
+        toast.loading("Adding comment...");
+        if (comment.trim() === "") {
+          toast.error("Comment cannot be empty");
+          return;
+        }
         const response = await fetch(`${backendUrl}/comment/${postId}`, {
           method: "POST",
           headers: {
@@ -449,13 +462,14 @@ export default function Page() {
         });
 
         const data = await response.json();
-
+        toast.dismiss();
         if (!data.status) {
           toast.error("Failed to add comment");
           return;
         }
         router.refresh();
       } catch (error) {
+        toast.dismiss();
         console.error("Error adding comment:", error);
       } finally {
         setIsLoading(false);
@@ -641,6 +655,7 @@ export default function Page() {
           toast.error(data.message);
         }
       } catch (error) {
+        toast.dismiss();
         console.error("Error uploading image:", error);
       } finally {
         setIsLoading(false);
@@ -849,6 +864,7 @@ export default function Page() {
     setPosts?: React.Dispatch<React.SetStateAction<Post[]>>;
   }) => {
     const [isLoading, setIsLoading] = React.useState(false);
+    const [isDialogOpen, setIsDialogOpen] = React.useState(false);
 
     const handleDeletePost = async () => {
       try {
@@ -863,7 +879,7 @@ export default function Page() {
         const data = await response.json();
         if (data.status) {
           toast.success("Post deleted successfully");
-          router.refresh();
+          router.push("/");
         } else {
           toast.error("Failed to delete post");
         }
@@ -926,16 +942,13 @@ export default function Page() {
           return;
         }
         setIsLoading(true);
-        const response = await fetch(
-          `${backendUrl}/save/${item._id}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${user.token}`,
-            },
-          }
-        );
+        const response = await fetch(`${backendUrl}/save/${item._id}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
         const data = await response.json();
         if (!data.status) {
           toast.error("Failed to save post");
@@ -959,6 +972,11 @@ export default function Page() {
       }
     };
 
+    const handleClose = () => {
+      setIsDialogOpen(false);
+      router.refresh();
+    };
+
     return (
       <React.Fragment>
         <div className="border-b border-gray-200/20 p-4 flex gap-2">
@@ -967,14 +985,13 @@ export default function Page() {
               <Loader2 className="text-white animate-spin" size={24} />
             </div>
           )}
-
           <img
             src={item.avatar}
             alt="Avatar"
             className="rounded-full w-10 h-10"
           />
           <div
-            className="flex flex-col w-full cursor-pointer"
+            className="flex flex-col w-full cursor-pointer group"
             onClick={() => router.push(`/?post=${item._id}&comments=true`)}>
             <div className="flex items-center gap-2">
               <h2 className="sm:text-lg text-base font-semibold">
@@ -1002,12 +1019,37 @@ export default function Page() {
             </div>
             <p className=" text-sm">{item.post}</p>
             {item.image && (
-              <div className="flex items-end w-full ">
+              <div className="flex items-end w-full relative ">
                 <img
                   src={item.image}
                   alt="Post"
-                  className="rounded-3xl mt-4 border-2 object-cover border-gray-200/20 w-[90%] mx-auto"
+                  className={`rounded-3xl mt-4 border-2 object-cover border-gray-200/20 w-[90%] mx-auto ${
+                    item.isEditable && "group-hover:opacity-50"
+                  }`}
                 />
+                {item.isEditable && (
+                  <span
+                    className="absolute top-[50%] right-[50%] cursor-pointer invisible group-hover:visible
+                  rounded-full border border-blue-400 bg-black p-2 text-white
+                  ">
+                    <DialogBox
+                      user={user}
+                      imgUrl={item.image}
+                      caption={item.post}
+                      key={item._id}
+                      id={item._id}
+                      onClose={handleClose}
+                      isOpen={isDialogOpen}
+                    />
+                    <Pen
+                      size={16}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDialogOpen(true);
+                      }}
+                    />
+                  </span>
+                )}
               </div>
             )}
             <div className="flex items-center mt-2">
@@ -1273,6 +1315,7 @@ export default function Page() {
           toast.error("Failed to join community");
         }
       } catch (error) {
+        toast.dismiss();
         console.error("Error joining community:", error);
       }
     };
@@ -1305,6 +1348,7 @@ export default function Page() {
           toast.error("Failed to leave community");
         }
       } catch (error) {
+        toast.dismiss();
         console.error("Error leaving community:", error);
       }
     };
@@ -1448,16 +1492,13 @@ export default function Page() {
           return;
         }
 
-        const response = await fetch(
-          `${backendUrl}/comment-like/${item._id}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${user.token}`,
-            },
-          }
-        );
+        const response = await fetch(`${backendUrl}/comment-like/${item._id}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+        });
         const data = await response.json();
         if (!data.status) {
           toast.error("Failed to like comment");
@@ -1794,7 +1835,7 @@ export default function Page() {
         try {
           if (!user) return;
           setIsLoading(true);
-          const response = await fetch(`${backendUrl}/saved`,{
+          const response = await fetch(`${backendUrl}/saved`, {
             method: "GET",
             headers: {
               "Content-Type": "application/json",

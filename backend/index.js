@@ -199,6 +199,56 @@ app.post("/check-url", auth, async (req, res) => {
   }
 });
 
+app.post("/update-post/:id", auth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+    const { post } = req.body;
+    if (!post) {
+      return res.status(400).json({
+        message: "All fields are required",
+        status: false,
+      });
+    }
+
+    const existingPost = await Post.findById(id);
+
+    if (!existingPost) {
+      return res.status(404).json({
+        message: "Post not found",
+        status: false,
+      });
+    }
+
+    if (existingPost.userId.toString() !== userId) {
+      return res.status(403).json({
+        message: "You are not authorized to update this post",
+        status: false,
+      });
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      id,
+      {
+        post,
+      },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      message: "Post updated successfully",
+      status: true,
+      post: updatedPost,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      message: "Internal server error",
+      status: false,
+    });
+  }
+});
+
 app.get("/posts/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -677,6 +727,7 @@ app.get("/user-profile", auth, async (req, res) => {
 app.delete("/delete-post/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
+
     const post = await Post.findById(id);
 
     if (!post) {
@@ -692,7 +743,6 @@ app.delete("/delete-post/:id", auth, async (req, res) => {
       const publicId = fileName.split(".")[0];
 
       const result = await cloudinary.uploader.destroy(publicId);
-
       if (result.result !== "ok") {
         return res.status(500).json({
           message: "Failed to delete image from Cloudinary",
@@ -709,7 +759,7 @@ app.delete("/delete-post/:id", auth, async (req, res) => {
       status: true,
     });
   } catch (err) {
-    console.error(err.message);
+    console.error(err);
     return res.status(500).json({
       message: "Internal server error",
       status: false,
@@ -1126,10 +1176,9 @@ app.get("/create-random-post", auth, async (req, res) => {
       if (part.inlineData) {
         const imageData = part.inlineData.data;
         // Save the image to a file or upload it to a cloud service
-        const fileName = `generated_image_${Date.now()}.png`;
+        const fileName = `generated_image_${Date.now()}`;
 
         const uploadResult = await uploadImageToCloudinary(imageData, fileName);
-        // console.log("Image uploaded to Cloudinary:", uploadResult);
         if (uploadResult) {
           const newPost = new Post({
             name: user.name,
@@ -1163,5 +1212,5 @@ app.get("/create-random-post", auth, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is listening on port ${PORT}`);
+  console.warn(`Server is listening on port ${PORT}`);
 });
