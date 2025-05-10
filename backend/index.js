@@ -7,8 +7,10 @@ const Comments = require("./models/comments.model");
 const Community = require("./models/community.model");
 const Notification = require("./models/notification.model");
 const Saved = require("./models/saved.model");
-const { GoogleGenAI } = require("@google/genai");
-const cloudinary = require("./cloudinary-helper");
+const jwt = require("jsonwebtoken");
+const { GoogleGenAI, Modality } = require("@google/genai");
+const { cloudinary } = require("./cloundinary");
+const auth = require("./middleware");
 
 const PORT = process.env.PORT || 8000;
 
@@ -17,27 +19,6 @@ app.use(express.json());
 
 app.get("/", async (_, res) => {
   try {
-    // const dummyAccounts = await Account.find({ type: "dummy" });
-
-    // const title = "Gothic & Dark Art";
-    // const comment = "A figure stands within a gothic hall, surrounded by candles and intricate architecture, creating a mysterious atmosphere.";
-    // const url = "https://res.cloudinary.com/dz2vnojqy/image/upload/v1746302572/2025-05-03_20-01-51_9282_liosl7.png"
-
-    // let oneRandomAccount = dummyAccounts[Math.floor(Math.random() * dummyAccounts.length)];
-    // const existingCommunity = await Community.findOne({ title });
-    // const data =
-    //   {
-    //     name : oneRandomAccount.name,
-    //     post : comment,
-    //     image : url,
-    //     like : Math.floor(Math.random() *  15) + 5,
-    //     userId : oneRandomAccount._id,
-    //     communityId : existingCommunity._id,
-    //   }
-
-    // const newPost = new Post(data);
-    // await newPost.save();
-
     return res.status(200).json({
       message: "Welcome to the Expense Tracker API",
       status: true,
@@ -57,11 +38,19 @@ app.post("/login", async (req, res) => {
 
     const existingAccount = await Account.findOne({ email });
 
+    const token = jwt.sign(
+      { id: existingAccount._id },
+      process.env.JWT_SECRET,
+      {}
+    );
     if (existingAccount) {
       return res.status(201).json({
         message: "User found",
         status: true,
-        user: existingAccount,
+        user: {
+          ...existingAccount._doc,
+          token,
+        },
       });
     }
 
@@ -82,10 +71,16 @@ app.post("/login", async (req, res) => {
 
     await newAccount.save();
 
+    const newToken = jwt.sign(
+      { id: newAccount._id },
+      process.env.JWT_SECRET,
+      {}
+    );
+
     return res.status(201).json({
       message: "User created successfully",
       status: true,
-      user: newAccount,
+      user: { ...newAccount._doc, token: newToken },
     });
   } catch (err) {
     console.error(err.message);
@@ -96,10 +91,11 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.post("/upload", async (req, res) => {
+app.post("/upload", auth, async (req, res) => {
   try {
-    const { username, avatar, post, image, userId, communityId } = req.body;
-    if (!username || !avatar || !post || !userId) {
+    const userId = req.userId;
+    const { username, avatar, post, image, communityId } = req.body;
+    if (!username || !avatar || !post) {
       return res.status(400).json({
         message: "All fields are required",
         status: false,
@@ -121,6 +117,78 @@ app.post("/upload", async (req, res) => {
       message: "Post created successfully",
       status: true,
       post: newPost,
+    });
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).json({
+      message: "Internal server error",
+      status: false,
+    });
+  }
+});
+
+app.post("/check-url", auth, async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({
+        message: "URL is required",
+        status: false,
+      });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+
+    // Fetch and convert image to base64
+    const imageResponse = await fetch(url);
+    const base64Image = Buffer.from(await imageResponse.arrayBuffer()).toString(
+      "base64"
+    );
+
+    // Generate AI comments
+    const aiResult = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [
+        {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Image,
+          },
+        },
+        {
+          text: 'check if this image is ai generated or not. Respond only with valid JSON in the format: { "isAiGenerated": true/false }',
+        },
+      ],
+    });
+
+    // Parse AI response
+    const content = JSON.parse(
+      aiResult.text.replace(/```(?:json)?\s*([\s\S]*?)\s*```/, "$1").trim()
+    );
+
+    if (content.isAiGenerated) {
+      return res.status(200).json({
+        message: "Image is AI generated",
+        status: true,
+      });
+    }
+
+    // delete the image from cloudinary
+    const parts = url.split("/");
+    const fileName = parts.pop();
+    const publicId = fileName.split(".")[0];
+    const result = await cloudinary.uploader.destroy(publicId);
+
+    if (result.result !== "ok") {
+      return res.status(500).json({
+        message: "Internal server error",
+        status: false,
+      });
+    }
+
+    return res.status(200).json({
+      message: "Image is not AI generated",
+      status: false,
     });
   } catch (err) {
     console.error(err.message);
@@ -221,7 +289,10 @@ app.get("/comments/:id/:userId", async (req, res) => {
             },
           },
           {
-            text: 'Create 20 comments for this image. Respond only with valid JSON in the format: { "comments": ["comment1", "comment2", ...] }',
+            text: `Create 20-30 comments for this image.
+            make sure the comments are relevant to the image and lengthy.
+            add some emojis to the comments also several tones in comment like positive, negative, neutral.
+            Respond only with valid JSON in the format: { "comments": ["comment1", "comment2", ...] }`,
           },
         ],
       });
@@ -240,7 +311,7 @@ app.get("/comments/:id/:userId", async (req, res) => {
       const commentsToSave = content.comments.map((comment, index) => ({
         userId: randomAccounts[index % randomAccounts.length]._id,
         comment,
-        createdAt: new Date(Date.now() - Math.floor(Math.random() * 604800000)), // 7 days in milliseconds
+        createdAt: new Date(),
         postId: id,
       }));
 
@@ -248,7 +319,7 @@ app.get("/comments/:id/:userId", async (req, res) => {
 
       // Update post metrics
       post.comment = comments.length;
-      post.like = Math.floor(Math.random() * 15) + 5;
+      post.like = Math.floor(Math.random() * 25) + 5;
       await post.save();
 
       const notification = new Notification({
@@ -299,11 +370,13 @@ app.get("/comments/:id/:userId", async (req, res) => {
   }
 });
 
-app.post("/comment/:id", async (req, res) => {
+app.post("/comment/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, comment } = req.body;
-    if (!userId || !comment) {
+    const { comment } = req.body;
+    const userId = req.userId;
+
+    if (!comment) {
       return res.status(400).json({
         message: "All fields are required",
         status: false,
@@ -401,12 +474,16 @@ app.get("/community/:id/:userId", async (req, res) => {
           avatar: user.picture,
           username: user.name,
           isLiked: userId !== "undefined" ? post.liked.includes(userId) : false,
-          isSaved: userId !== "undefined" ? savedPost.some(
-            (saved) =>
-              saved.postId.toString() === post._id.toString() &&
-              saved.userId.toString() === userId
-          ) : false,
-          isEditable: userId !== "undefined" ? post.userId.toString() === userId : false,
+          isSaved:
+            userId !== "undefined"
+              ? savedPost.some(
+                  (saved) =>
+                    saved.postId.toString() === post._id.toString() &&
+                    saved.userId.toString() === userId
+                )
+              : false,
+          isEditable:
+            userId !== "undefined" ? post.userId.toString() === userId : false,
         };
       })
     );
@@ -434,9 +511,10 @@ app.get("/community/:id/:userId", async (req, res) => {
   }
 });
 
-app.post("/join-community/:id/:userId", async (req, res) => {
+app.post("/join-community/:id/", auth, async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const userId = req.userId;
     const community = await Community.findById(id);
     const user = await Account.findById(userId);
 
@@ -494,9 +572,10 @@ app.post("/join-community/:id/:userId", async (req, res) => {
   }
 });
 
-app.post("/leave-community/:id/:userId", async (req, res) => {
+app.post("/leave-community/:id/", auth, async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const userId = req.userId;
+    const { id } = req.params;
     const community = await Community.findById(id);
     const user = await Account.findById(userId);
 
@@ -547,9 +626,9 @@ app.post("/leave-community/:id/:userId", async (req, res) => {
   }
 });
 
-app.get("/user-profile/:id", async (req, res) => {
+app.get("/user-profile", auth, async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.userId;
     const user = await Account.findById(id);
     const posts = await Post.find({ userId: id }).sort({ createdAt: -1 });
     const savedPost = await Saved.find({
@@ -595,7 +674,7 @@ app.get("/user-profile/:id", async (req, res) => {
   }
 });
 
-app.delete("/delete-post/:id", async (req, res) => {
+app.delete("/delete-post/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const post = await Post.findById(id);
@@ -638,9 +717,10 @@ app.delete("/delete-post/:id", async (req, res) => {
   }
 });
 
-app.post("/like/:id/:userId", async (req, res) => {
+app.post("/like/:id/", auth, async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const userId = req.userId;
     const post = await Post.findById(id);
 
     if (!post) {
@@ -686,9 +766,9 @@ app.post("/like/:id/:userId", async (req, res) => {
   }
 });
 
-app.get("/notifications/:userId", async (req, res) => {
+app.get("/notifications", auth, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.userId;
     const notifications = await Notification.find({ to: userId }).sort({
       createdAt: -1,
     });
@@ -733,11 +813,11 @@ app.get("/notifications/:userId", async (req, res) => {
   }
 });
 
-app.delete("/mark-as-read/:id", async (req, res) => {
+app.delete("/mark-as-read/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const notification = await Notification.findOneAndDelete({ _id: id });
-    
+
     if (!notification) {
       return res.status(404).json({
         message: "Notification not found",
@@ -758,7 +838,7 @@ app.delete("/mark-as-read/:id", async (req, res) => {
   }
 });
 
-app.delete("/delete-notification/:id", async (req, res) => {
+app.delete("/delete-notification/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const notification = await Notification.deleteMany({ to: id });
@@ -781,9 +861,9 @@ app.delete("/delete-notification/:id", async (req, res) => {
   }
 });
 
-app.get("/my-communities/:id", async (req, res) => {
+app.get("/my-communities", auth, async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.userId;
     const user = await Account.findById(id);
     if (!user) {
       return res.status(404).json({
@@ -819,9 +899,10 @@ app.get("/my-communities/:id", async (req, res) => {
   }
 });
 
-app.post("/comment-like/:id/:userId", async (req, res) => {
+app.post("/comment-like/:id", auth, async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const userId = req.userId;
     const comment = await Comments.findById(id);
     if (!comment) {
       return res.status(404).json({
@@ -865,7 +946,7 @@ app.post("/comment-like/:id/:userId", async (req, res) => {
   }
 });
 
-app.delete("/delete-comment/:id", async (req, res) => {
+app.delete("/delete-comment/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const comment = await Comments.findById(id);
@@ -895,9 +976,10 @@ app.delete("/delete-comment/:id", async (req, res) => {
   }
 });
 
-app.post("/save/:id/:userId", async (req, res) => {
+app.post("/save/:id", auth, async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id } = req.params;
+    const userId = req.userId;
     const savedPost = await Saved.findOne({ postId: id, userId });
     if (savedPost) {
       await Saved.findByIdAndDelete(savedPost._id);
@@ -922,9 +1004,9 @@ app.post("/save/:id/:userId", async (req, res) => {
   }
 });
 
-app.get("/saved/:userId", async (req, res) => {
+app.get("/saved", auth, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.userId;
     const savedPosts = await Saved.find({ userId });
     const postIds = savedPosts.map((saved) => saved.postId);
     const posts = await Post.find({ _id: { $in: postIds } }).sort({
@@ -955,6 +1037,122 @@ app.get("/saved/:userId", async (req, res) => {
       status: true,
       posts: postsWithUserDetails,
     });
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).json({
+      message: "Internal server error",
+      status: false,
+    });
+  }
+});
+
+const uploadImageToCloudinary = async (base64, fileName) => {
+  const stream = await cloudinary.uploader.upload(
+    "data:image/png;base64," + base64,
+    {
+      public_id: fileName,
+      overwrite: true,
+    }
+  );
+
+  return stream.secure_url;
+};
+
+app.get("/create-random-post", auth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const user = await Account.findById(userId);
+    const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+    // Art styles, subjects, and scene descriptions for random generation
+    const artStyles = [
+      "digital art",
+      "3D render",
+      "oil painting",
+      "watercolor",
+      "hyper-realistic",
+      "cyberpunk",
+      "fantasy",
+      "surrealism",
+      "neo-impressionism",
+      "concept art",
+    ];
+
+    const subjects = [
+      "a dragon",
+      "a cosmic entity",
+      "a mecha warrior",
+      "a mystical creature",
+      "a futuristic city",
+      "an ancient temple",
+      "an ethereal landscape",
+      "a celestial being",
+      "a steampunk inventor",
+      "an underwater civilization",
+    ];
+
+    const descriptions = [
+      "bathed in golden light",
+      "with intricate details",
+      "in a misty forest",
+      "among floating islands",
+      "with vibrant colors",
+      "during sunset",
+      "with bioluminescent elements",
+      "with dramatic lighting",
+      "with floating particles",
+      "with a magical atmosphere",
+    ];
+
+    // Generate random prompt
+    const style = artStyles[Math.floor(Math.random() * artStyles.length)];
+    const subject = subjects[Math.floor(Math.random() * subjects.length)];
+    const description =
+      descriptions[Math.floor(Math.random() * descriptions.length)];
+
+    const prompt = `Create a high-quality ${style} of ${subject} ${description}. Make it visually stunning with detailed textures, excellent composition, and dramatic lighting.`;
+    const post = prompt;
+
+    // Log the generated prompt
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash-preview-image-generation",
+      contents: prompt,
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
+      },
+    });
+
+    for (const part of response.candidates[0].content.parts) {
+      // Based on the part type, either show the text or save the image
+      if (part.inlineData) {
+        const imageData = part.inlineData.data;
+        // Save the image to a file or upload it to a cloud service
+        const fileName = `generated_image_${Date.now()}.png`;
+
+        const uploadResult = await uploadImageToCloudinary(imageData, fileName);
+        // console.log("Image uploaded to Cloudinary:", uploadResult);
+        if (uploadResult) {
+          const newPost = new Post({
+            name: user.name,
+            post: post,
+            image: uploadResult,
+            userId: userId,
+          });
+
+          await newPost.save();
+
+          return res.status(200).json({
+            message: "Post created successfully",
+            status: true,
+            post: newPost,
+          });
+        } else {
+          res.status(500).json({
+            message: "Failed to upload image",
+            status: false,
+          });
+        }
+      }
+    }
   } catch (err) {
     console.error(err.message);
     return res.status(500).json({
