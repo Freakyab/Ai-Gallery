@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+
 const app = express();
 const Account = require("./models/account.model");
 const Post = require("./models/post.model");
@@ -20,7 +21,7 @@ app.use(express.json());
 app.get("/", async (_, res) => {
   try {
     return res.status(200).json({
-      message: "Welcome to the Expense Tracker API",
+      message: "Welcome to the Ai Gallery API",
       status: true,
     });
   } catch (err) {

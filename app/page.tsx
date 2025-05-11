@@ -115,6 +115,7 @@ export default function Page() {
   const profile = searchParams.get("profile");
   const saved = searchParams.get("saved");
   const router = useRouter();
+  console.log(backendUrl,user);
 
   React.useEffect(() => {
     if (user) {
@@ -162,6 +163,7 @@ export default function Page() {
             }),
           });
           const data = await response.json();
+          console.log(data);
           if (data.status) {
             setUser(data.user);
           }
