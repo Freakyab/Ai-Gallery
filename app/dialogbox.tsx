@@ -3,6 +3,7 @@ import { X, Check } from "lucide-react";
 import toast from "react-hot-toast";
 import { User } from "./page";
 import { backendUrl } from "./backend";
+import Image from "next/image";
 
 type DialogBoxProps = {
   user: User | null;
@@ -21,8 +22,9 @@ const DialogBox: React.FC<DialogBoxProps> = ({
   caption,
   onClose,
 }) => {
-  if (!isOpen) return null;
   const [inputValue, setInputValue] = React.useState(caption || "");
+
+  
   const handleUpdatePost = async (e: React.MouseEvent) => {
     try {
       if (!user) {
@@ -31,7 +33,7 @@ const DialogBox: React.FC<DialogBoxProps> = ({
       }
       e.preventDefault();
       toast.loading("Updating post...");
-
+      
       const response = await fetch(`${backendUrl}/update-post/${id}`, {
         method: "POST",
         headers: {
@@ -40,11 +42,11 @@ const DialogBox: React.FC<DialogBoxProps> = ({
         },
         body: JSON.stringify({ post: inputValue }),
       });
-
+      
       if (!response.ok) {
         throw new Error("Failed to update post");
       }
-
+      
       const data = await response.json();
       console.log("Post updated:", data);
       toast.dismiss();
@@ -61,6 +63,9 @@ const DialogBox: React.FC<DialogBoxProps> = ({
       onClose();
     }
   };
+
+  if (!isOpen) return null;
+  
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md transition-opacity duration-300">
       <div className="bg-gray-900 rounded-xl w-full max-w-md p-6 shadow-2xl border border-gray-800 relative transform transition-all duration-300 ease-in-out">
@@ -77,8 +82,10 @@ const DialogBox: React.FC<DialogBoxProps> = ({
           {/* Image preview with better styling */}
           {imgUrl && (
             <div className="relative mb-4 rounded-lg overflow-hidden shadow-lg border border-gray-700">
-              <img
+              <Image
                 src={imgUrl}
+                width={500}
+                height={300}
                 alt="Post preview"
                 className="w-full h-auto object-cover"
               />

@@ -27,6 +27,7 @@ import React from "react";
 import { backendUrl } from "./backend";
 import { toast } from "react-hot-toast";
 import DialogBox from "./dialogbox";
+import Image from "next/image";
 
 export type User = {
   email: string;
@@ -352,7 +353,7 @@ export default function Page() {
       };
 
       fetchPosts();
-    }, [user]);
+    }, []);
 
     return (
       <div
@@ -435,7 +436,7 @@ export default function Page() {
       };
 
       fetchPost();
-    }, [postId]);
+    }, []);
 
     const handleCommentSubmit = async () => {
       if (!user) {
@@ -487,7 +488,7 @@ export default function Page() {
           <div className="flex items-center justify-center h-full">
             <Loader2 className="text-white animate-spin" size={24} />
           </div>
-        ) : (
+        ) : isLoading && comments.length > 0 && (
           <div className="flex p-4 border-b gap-4 border-gray-200/20">
             <input
               type="text"
@@ -558,7 +559,7 @@ export default function Page() {
       };
 
       fetchCommunities();
-    }, [user]);
+    }, []);
 
     const handleImageUpload = async (
       e: React.ChangeEvent<HTMLInputElement>
@@ -665,9 +666,12 @@ export default function Page() {
     return (
       <div className="flex flex-col p-2 sm:p-4 border-b border-gray-200/20">
         <div className="flex items-center justify-center gap-4 p-2">
-          <img
+          <Image
+            width={40}
+            height={40}
             src="https://github.com/shadcn.png"
             className="w-10 h-10 rounded-full "
+            alt="User Avatar"
           />
           <input
             value={text}
@@ -680,7 +684,9 @@ export default function Page() {
 
         {file && (
           <div className="relative w-[80%] m-4 mx-auto">
-            <img
+            <Image
+              width={400}
+              height={400}
               src={preview ?? ""}
               alt="Uploaded"
               className="rounded-lg ml-2 object-cover object-center h-[400px] w-full border-2 border-gray-200/20"
@@ -823,7 +829,9 @@ export default function Page() {
               key={index}
               className="flex gap-4 p-4 rounded-lg shadow-md cursor-pointer"
               onClick={() => router.push(`/?community=${item._id}`)}>
-              <img
+              <Image
+                width={40}
+                height={40}
                 src={item.image !== "https" ? item.image : ""}
                 alt="Profile"
                 className="rounded-full w-12 h-12"
@@ -985,7 +993,9 @@ export default function Page() {
               <Loader2 className="text-white animate-spin" size={24} />
             </div>
           )}
-          <img
+          <Image
+            width={40}
+            height={40}
             src={item.avatar}
             alt="Avatar"
             className="rounded-full w-10 h-10"
@@ -1020,7 +1030,9 @@ export default function Page() {
             <p className=" text-sm">{item.post}</p>
             {item.image && (
               <div className="flex items-end w-full relative ">
-                <img
+                <Image
+                  width={500}
+                  height={500}
                   src={item.image}
                   alt="Post"
                   className={`rounded-3xl mt-4 border-2 object-cover border-gray-200/20 w-[90%] mx-auto ${
@@ -1119,7 +1131,7 @@ export default function Page() {
       if (user) {
         fetchNotifications();
       }
-    }, [user]);
+    }, []);
 
     const handleMarkAsRead = async (item: Notification) => {
       try {
@@ -1219,7 +1231,9 @@ export default function Page() {
                   onClick={() => {
                     handleMarkAsRead(item);
                   }}>
-                  <img
+                  <Image
+                    width={40}
+                    height={40}
                     src={item.avatar || "https://github.com/shadcn.png"}
                     alt="Avatar"
                     className="rounded-full w-10 h-10"
@@ -1285,7 +1299,7 @@ export default function Page() {
       if (community && community !== "undefined") {
         fetchCommunityDetails();
       }
-    }, [community]);
+    }, []);
 
     const handleJoinCommunity = async () => {
       if (!communityDetails) return;
@@ -1401,8 +1415,11 @@ export default function Page() {
               <div className="sm:h-32 h-24 w-full bg-gray-200/20 sm:rounded-xl"></div>
               <div className="flex flex-col items-start my-8 ml-32">
                 <div className="absolute top-16 sm:top-20 left-4 bg-black p-2 rounded-full">
-                  <img
-                    src={communityDetails?.image}
+                  <Image
+                    width={100}
+                    height={100}
+                    alt="Community Image"
+                    src={communityDetails?.image || ""}
                     className="rounded-full w-20 h-20"
                   />
                 </div>
@@ -1557,7 +1574,9 @@ export default function Page() {
           </div>
         )}
 
-        <img
+        <Image
+          width={100}
+          height={100}
           src={item.avatar}
           alt="Avatar"
           className="rounded-full w-10 h-10"
@@ -1587,7 +1606,9 @@ export default function Page() {
           <p className=" text-sm">{item.comment}</p>
           {item.image && (
             <div className="flex items-end w-full ">
-              <img
+              <Image
+              width={100}
+              height={100}
                 src={item.image}
                 alt="Post"
                 className="rounded-3xl mt-4 border-2 object-cover border-gray-200/20 w-[90%] mx-auto"
@@ -1643,7 +1664,7 @@ export default function Page() {
       };
 
       fetchUserDetails();
-    }, [user]);
+    }, []);
 
     return (
       <div
@@ -1665,7 +1686,10 @@ export default function Page() {
               <div className="sm:h-32 h-24 w-full bg-gray-200/20 sm:rounded-xl"></div>
               <div className="flex flex-col items-start my-8 ml-32">
                 <div className="absolute sm:bottom-12 bottom-10 left-4 bg-black p-2 rounded-full">
-                  <img
+                  <Image
+                    width={100}
+                    height={100}
+                    alt="Profile Image"
                     src={UserDetails?.picture}
                     // src="https://github.com/shadcn.png"
                     className="rounded-full w-24 h-24"
@@ -1856,7 +1880,7 @@ export default function Page() {
       };
 
       fetchUserDetails();
-    }, [user]);
+    }, []);
 
     return (
       <div className="flex flex-col h-screen overflow-auto border border-gray-200/20 w-full sm:p-4">
